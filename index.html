@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Green City — الموظفون</title>
+  <meta name="description" content="طلبات الإدخال والإخراج والاطّلاع على المخزن — مشروع جرين سيتي">
+  <link rel="icon" href="img/logo.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0a2b22">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Green City">
+  <link rel="apple-touch-icon" href="img/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/portal.css">
+  <script>
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem('green-theme'); } catch (e) {}
+      document.documentElement.dataset.theme =
+        saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    })();
+  </script>
+</head>
+<body class="portal">
+
+  <!-- ============================ الدخول ============================ -->
+  <div id="auth" class="auth-screen hidden">
+    <section class="auth-hero">
+      <div class="auth-grid"></div>
+      <div class="brand-big">
+        <img src="img/logo.png" alt="">
+        <div><b>Green City</b><small>موقع الموظفين</small></div>
+      </div>
+      <div>
+        <h2>اطلب ما تحتاجه من المخزن — من أي مكان.</h2>
+        <p>اكتب طلب الإدخال أو الإخراج من هاتفك، فيصل إلى الحاسوب الرئيسي ويُسجَّل سنداً بموافقة المدير. واطّلع على المواد وأرصدتها كما هي الآن.</p>
+        <div class="auth-ops">
+          <span style="--c:#4ade80"><i></i>إدخال</span>
+          <span style="--c:#f87171"><i></i>إخراج</span>
+          <span style="--c:#60a5fa"><i></i>المخزون</span>
+          <span style="--c:#fbbf24"><i></i>المخطط</span>
+        </div>
+      </div>
+      <small style="color:#6d9182">Green City</small>
+    </section>
+
+    <section class="auth-panel">
+      <div class="auth-card">
+        <div class="auth-top">
+          <button type="button" class="lang-btn" data-lang-toggle translate="no"></button>
+          <button type="button" class="icon-btn" data-theme-toggle title="المظهر"></button>
+        </div>
+        <h1>تسجيل الدخول</h1>
+        <p class="sub">اسم الدخول وكلمة المرور كما سلّمهما لك المدير.</p>
+        <form id="login-form" autocomplete="on">
+          <label class="field"><span>اسم الدخول</span>
+            <input name="username" autocomplete="username" autocapitalize="off" spellcheck="false" class="ltr" style="text-align:right" required></label>
+          <label class="field"><span>كلمة المرور</span>
+            <input name="password" type="password" autocomplete="current-password" required></label>
+          <div id="login-error" class="form-error" hidden></div>
+          <button class="btn btn-primary btn-lg btn-block" type="submit">دخول</button>
+        </form>
+        <div class="auth-foot">
+          <span>لا حساب لك؟ يُنشئه المدير من الحاسوب الرئيسي.</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============================ الموقع ============================ -->
+  <div id="app" class="portal-app hidden">
+    <header class="p-top">
+      <a class="p-brand" href="#/home"><img src="img/logo.png" alt=""><b>Green City</b></a>
+      <nav class="p-nav" id="p-nav"></nav>
+      <div class="spacer"></div>
+      <span class="pc-pill" id="pc-pill" title=""><i></i><span></span></span>
+      <button class="lang-btn" data-lang-toggle translate="no"></button>
+      <button class="icon-btn" data-theme-toggle title="المظهر"></button>
+      <button class="icon-btn" id="me-btn" title="الحساب"></button>
+    </header>
+    <!-- «تحدّث البرنامج»: خارج #content، فلا يُمحى مع كل تنقّل -->
+    <div class="p-banner" id="p-banner" role="status" hidden></div>
+    <main class="p-content" id="content"></main>
+    <nav class="tabbar p-tabbar" id="tabbar"></nav>
+  </div>
+
+  <div id="modals"></div>
+  <div id="toasts" class="toasts"></div>
+
+  <script type="module" src="js/portal/main.js"></script>
+</body>
+</html>

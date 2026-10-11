@@ -1,0 +1,406 @@
+/* ==========================================================================
+   موقع الموظفين — فوق نظام التصميم نفسه (app.css)
+   شريط علويّ بدل الجانبي: الموقع يُفتح على الهاتف أكثر ممّا يُفتح على
+   الحاسوب، وأربع شاشات لا تحتاج قائمة جانبية.
+   ========================================================================== */
+
+body.portal { background: var(--bg); }
+
+.portal-app { min-height: 100vh; display: flex; flex-direction: column; }
+
+.p-top {
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: center; gap: 8px;
+  height: 60px; padding: 0 18px;
+  background: var(--brand-ink); color: #e9f3ee;
+  box-shadow: 0 6px 20px -14px rgba(0, 0, 0, .6);
+}
+.p-brand { display: flex; align-items: center; gap: 9px; color: #fff; text-decoration: none; margin-inline-end: 10px; }
+.p-brand:hover { text-decoration: none; }
+.p-brand img { width: 34px; height: 34px; border-radius: 9px; background: #fff; padding: 2px; }
+.p-brand b { font-size: 15.5px; letter-spacing: .2px; }
+
+.p-nav { display: flex; gap: 2px; }
+.p-nav a {
+  display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 12px; border-radius: 10px;
+  color: #b9d2c7; font-weight: 600; font-size: 13.5px; text-decoration: none;
+}
+.p-nav a:hover { background: rgba(255, 255, 255, .07); color: #fff; text-decoration: none; }
+.p-nav a.active { background: rgba(255, 255, 255, .12); color: #fff; }
+
+.p-top .lang-btn, .p-top .icon-btn {
+  background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .12); color: #dbe9e2;
+}
+.p-top .icon-btn:hover, .p-top .lang-btn:hover { background: rgba(255, 255, 255, .14); color: #fff; }
+
+/* حالة الحاسوب الرئيسي — كل ما يُقال عن الاتصال، بلا عنوان ولا تفاصيل */
+.pc-pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: 15px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  color: #9be3bf; background: rgba(74, 222, 128, .12);
+}
+.pc-pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.pc-pill.on i { box-shadow: 0 0 0 4px rgba(74, 222, 128, .18); }
+.pc-pill.off { color: #fcd9a0; background: rgba(251, 191, 36, .12); }
+.pc-pill.unknown { color: #c7d6cf; background: rgba(255, 255, 255, .08); }
+/* تُضغط فتُفتح تفاصيلها: الـ title لا يظهر على شاشة اللمس. */
+.pc-pill[role="button"] { cursor: pointer; }
+.pc-pill[role="button"]:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.pc-pill .pc-short { display: none; }
+/* في نافذة التفاصيل على سطحٍ فاتح لا على الشريط الداكن */
+.pc-pill.pc-big { justify-self: start; height: 34px; font-size: 13.5px; padding: 0 14px; border-radius: 17px; }
+.pc-pill.pc-big.on { color: var(--ok); background: var(--ok-soft); }
+.pc-pill.pc-big.off { color: var(--warn); background: var(--warn-soft); }
+.pc-pill.pc-big.unknown { color: var(--text-2); background: var(--surface-3); }
+
+.p-content { flex: 1; width: 100%; max-width: 1180px; margin: 0 auto; padding: 22px 20px 40px; }
+
+.p-tabbar { display: none; }
+
+@media (max-width: 860px) {
+  .p-nav { display: none; }
+  .p-top { padding: 0 12px; gap: 6px; }
+  .p-brand b { display: none; }
+  .p-content { padding: 14px 12px 96px; }
+  .p-tabbar { display: grid; }
+  /* «متصل» أو «غير متصل» — كلمةٌ تُقرأ ولا تُقصّ، فلا تتشابه الحالتان. */
+  .pc-pill .pc-long { display: none; }
+  .pc-pill .pc-short { display: inline; }
+}
+@media (max-width: 560px) {
+  .pc-pill .pc-sep, .pc-pill .pc-when { display: none; }
+}
+
+/* ------------------------------ الترحيب ------------------------------ */
+
+.hello {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 18px 20px; margin-bottom: 16px; border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--brand-ink), var(--brand-ink-2));
+  color: #e9f3ee; box-shadow: var(--shadow-2);
+}
+.hello h2 { margin: 0; font-size: 20px; color: #fff; }
+.hello p { margin: 3px 0 0; color: #a9c7ba; font-size: 13px; }
+.hello .perm { display: flex; flex-wrap: wrap; gap: 6px; margin-inline-start: auto; }
+.hello .perm span {
+  font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px;
+  background: rgba(255, 255, 255, .1); color: #dcebe4;
+}
+
+/* ------------------------------ الطلبات ------------------------------ */
+
+.req-state { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+.req-state.pending { background: var(--surface-3); color: var(--text-2); }
+.req-state.received { background: var(--warn-soft); color: var(--warn); }
+.req-state.posted { background: var(--ok-soft); color: var(--ok); }
+.req-state.rejected { background: var(--bad-soft); color: var(--bad); }
+.req-state.withdrawn { background: var(--surface-3); color: var(--text-3); text-decoration: line-through; }
+
+.req-note { margin-top: 6px; font-size: 12.5px; padding: 7px 10px; border-radius: 9px; background: var(--surface-2); color: var(--text-2); }
+.req-note.bad { background: var(--bad-soft); color: var(--bad); }
+
+.stale-note { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--text-3); margin: -6px 0 14px; }
+
+/* المخطط في الموقع — نفسه، بلا أدوات التعديل. وعلى الهاتف أعرض من الشاشة
+   يُمرَّر جانباً: بعرضها تصير المنازل نقاطاً لا يُصاب منها شيء بالإصبع.
+   والبحث فوقه يفتح المنزل برقمه بلا تكبير ولا تمرير. */
+.p-plan .plan-svg { min-width: 560px; }
+@media (max-width: 640px) {
+  .p-plan .plan-svg { min-width: 980px; }
+}
+.p-house-find { display: grid; gap: 8px; padding: 0 14px 12px; }
+.p-house-find .house-grid { max-height: 150px; }
+.p-house-find .house-grid:empty { display: none; }
+.house-card { display: grid; gap: 8px; }
+.house-card .meter { height: 10px; }
+
+/* ==========================================================================
+   الإصدار الرابع — الموقع
+   نوعا الحساب، والأقسام في الطلب والمخزون، وتنبيه «التجهيز المكرر»،
+   وشريط «تحدّث البرنامج». ولون القسم في --sc على العنصر نفسه.
+   والأسماء هنا p- وps- : app.css يُحمَّل هنا أيضاً، وفيه أسماء البرنامج.
+   ========================================================================== */
+
+/* ------------------------------ إصدار الموقع ------------------------------ */
+
+.p-banner {
+  position: sticky; top: 60px; z-index: 29;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 18px; font-size: 13px; font-weight: 600;
+  background: var(--info-soft); color: var(--text);
+  border-bottom: 1px solid color-mix(in srgb, var(--info) 30%, transparent);
+}
+.p-banner[hidden] { display: none; }
+.p-banner > svg { color: var(--info); flex: none; }
+.p-banner .grow { flex: 1; min-width: 0; }
+@media (max-width: 860px) { .p-banner { padding: 8px 12px; } }
+
+/* زرّ «طلب جديد» في الشريط العلوي — على الهاتف يقوم مقامه زرّ الشريط السفلي */
+.p-nav .p-new {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 13px; margin-inline-start: 6px;
+  border: 0; border-radius: 10px; background: var(--gold); color: #1c1304; font: inherit; font-weight: 700; font-size: 13.5px;
+}
+.p-nav .p-new:hover { filter: brightness(1.06); }
+
+/* ------------------------------ نوع الحساب ------------------------------ */
+
+.p-kind {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+  border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2);
+  line-height: 1.7;
+}
+.p-kind .kind-icon {
+  flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px;
+  background: var(--kc-soft); color: var(--kc);
+}
+.p-kind b { font-size: 15px; }
+.p-kind.trusted { --kc: var(--ok); --kc-soft: var(--ok-soft); }
+.p-kind.asker { --kc: var(--info); --kc-soft: var(--info-soft); }
+/* في الترحيب: نوع الحساب أوّل الشارات وأوضحها */
+.hello .perm span.kind { display: inline-flex; align-items: center; gap: 5px; background: rgba(255, 255, 255, .18); color: #fff; }
+
+/* ------------------------------ الطلبات ------------------------------ */
+
+.req-state.cancelled { background: var(--bad-soft); color: var(--bad); }
+/* سبب الرفض: ما يحتاجه صاحب الطلب ليصحّح ويعيد — بارزٌ لا يُقرأ بين السطور */
+.req-note.strong { font-size: 13.5px; line-height: 1.7; border-inline-start: 3px solid var(--bad); }
+.req-voucher {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 7px;
+  font-size: 12px; background: var(--ok-soft); color: var(--ok);
+}
+.req-voucher b { font-weight: 700; }
+.req-voucher.cancelled { background: var(--surface-3); color: var(--text-3); }
+.req-voucher.cancelled b { text-decoration: line-through; }
+/* طلبٌ من هذا الجهاز لم يعد في السحابة قبل أن يصل قراره — لا يُعرف هنا. */
+.req-state.gone { background: var(--info-soft); color: var(--info); }
+/* سجلّ الطلبات على الهاتف: سطرٌ صغير تحت عنوان «طلباتي» يقول أين يُحفظ. */
+.p-history-note {
+  flex-basis: 100%; display: flex; align-items: flex-start; gap: 6px; margin-top: -4px;
+  font-size: 12px; font-weight: 500; line-height: 1.6; color: var(--text-3);
+}
+.p-history-note svg { flex: none; margin-top: 3px; }
+/* متصفّحٌ لا يحفظ ما يُكتب فيه: التنبيه فوق الطلبات، لا يُلصق بالعنوان. */
+.p-keep-warn { padding-bottom: 0; }
+.req-again { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--warn); }
+/* على الهاتف تلتفّ الحالة: «چاوەڕێی کۆمپیوتەری سەرەکی» في سطرٍ واحد أعرضُ
+   من نصف الشاشة، فتدفع الطلبات كلّها خارجها. */
+@media (max-width: 640px) {
+  .feed > .req-item { min-width: 0; }
+  .req-item .f-side { white-space: normal; max-width: 42%; }
+  .req-item .req-state { white-space: normal; line-height: 1.5; }
+  /* وكل سطرٍ في القوائم: التاريخ الكردي («9 تشرینی یەکەم 2026») يلتفّ ولا
+     يدفع الصفحة جانباً على شاشة 320 بكسلاً. */
+  .feed > .feed-item { min-width: 0; }
+  .feed-item .f-side { white-space: normal; max-width: 38%; }
+}
+/* رمز المنزل كلمةٌ واحدة: لا يُكسر عند الشرطة («D-» ثم «DF13») */
+.house-code { white-space: nowrap; direction: ltr; unicode-bidi: isolate; }
+
+/* ------------------------------ الأقسام: المخزون ------------------------------ */
+
+/* اسم المادة ورمزها سطران في الجدول — على الهاتف لا يلتصق الرمز بالاسم */
+.cell-main small { display: block; font-weight: 500; font-size: 12px; color: var(--text-3); }
+[dir="rtl"] .cell-main small.ltr { text-align: right; }
+
+.p-sec-chips { margin-bottom: 12px; }
+.chip.p-sec-chip { min-height: 34px; }
+.chip.p-sec-chip svg { color: var(--sc); flex: none; }
+.chip.p-sec-chip.on { background: var(--sc); border-color: var(--sc); color: #fff; }
+.chip.p-sec-chip.on svg { color: #fff; }
+.p-sec-card { margin-bottom: 14px; border-top: 3px solid var(--sc); }
+.p-sec-card .card-head { gap: 10px; }
+.p-sec-ico {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px;
+  background: color-mix(in srgb, var(--sc) 15%, transparent); color: var(--sc);
+}
+/* اسم القسم في سطرٍ صغير: أيقونته بلونه ثم اسمه */
+.p-sec-name { display: inline-flex; align-items: center; gap: 4px; }
+.p-sec-name svg { color: var(--sc); flex: none; }
+
+/* ------------------------------ الأقسام: الطلب ------------------------------
+   أهدافٌ للإبهام: الزرّ 56 بكسلاً على الأقل، والمادة سطرٌ كامل. */
+
+.p-sections { margin-bottom: 12px; scroll-margin-top: 72px; }
+.p-sections:empty { display: none; }
+.p-sec-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.p-sec-tile {
+  display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 8px 10px;
+  border: 1px solid var(--border); border-bottom: 3px solid var(--sc); border-radius: 13px;
+  background: var(--surface); color: var(--text); text-align: start; font: inherit;
+  transition: border-color .15s, box-shadow .15s;
+}
+.p-sec-tile:hover { border-color: var(--sc); box-shadow: var(--shadow-1); }
+.p-sec-tile:active { background: color-mix(in srgb, var(--sc) 8%, var(--surface)); }
+.p-sec-tile .p-sec-ico { width: 38px; height: 38px; border-radius: 11px; }
+.p-sec-tile b { flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.35; }
+.p-sec-tile .n, .p-sec-head .n { font-size: 12px; font-weight: 700; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+.p-sec-head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 10px; margin-bottom: 8px;
+  border-radius: 12px; background: color-mix(in srgb, var(--sc) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--sc) 30%, transparent);
+}
+.p-sec-head b { font-size: 14.5px; }
+.p-sec-head .btn { min-height: 36px; }
+
+.p-sec-items {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px;
+  max-height: min(420px, 55vh); overflow-y: auto; overscroll-behavior: contain; padding: 2px;
+}
+.p-sec-item {
+  display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: 11px; background: var(--surface);
+  color: var(--text); text-align: start; font: inherit;
+}
+.p-sec-item:hover { border-color: var(--op, var(--border-strong)); }
+.p-sec-item:active { background: var(--surface-3); }
+.p-sec-item .ps-main { flex: 1; min-width: 0; }
+.p-sec-item .ps-name { font-weight: 600; line-height: 1.4; }
+.p-sec-item .ps-sku { color: var(--text-3); font-size: 12px; }
+.p-sec-item .ps-bal { font-size: 13px; font-weight: 700; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.p-sec-item .ps-bal.zero { color: var(--bad); }
+.p-sec-item .ps-added { display: none; color: var(--op, var(--ok)); }
+.p-sec-item.added { background: var(--op-soft, var(--surface-3)); border-color: color-mix(in srgb, var(--op, var(--ok)) 45%, transparent); }
+.p-sec-item.added .ps-added { display: inline-flex; }
+
+@media (max-width: 640px) {
+  .p-sec-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .p-sec-tile { min-height: 62px; }
+  .p-sec-items { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------- التجهيز المكرر ---------------------------- */
+
+.p-prior {
+  display: inline-flex; align-items: flex-start; gap: 6px; margin-top: 5px; padding: 3px 9px;
+  border-radius: 8px; background: var(--warn-soft); color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  font-size: 12px; font-weight: 700; line-height: 1.6;
+}
+.p-prior svg { flex: none; margin-top: 3px; }
+.line.p-resupply:not(.short) { border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+
+.p-again-list { display: grid; gap: 6px; max-height: 46vh; overflow-y: auto; }
+.p-again { padding: 9px 12px; border-radius: 11px; border: 1px solid var(--border); background: var(--surface-2); line-height: 1.7; }
+.p-again b { font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+   الأقسام أيقوناتٍ — الرئيسية وشاشة القسم
+   كل قسم أيقونةٌ كبيرة بلونه (--sc) في الرئيسية، وشاشته: موادّه بأرصدتها،
+   وعدّادات حالها، والطلب منه مباشرةً.
+   أهدافٌ للإبهام: الأيقونة والسطر والزرّ 48 بكسلاً على الأقل.
+   ========================================================================== */
+
+/* ------------------------------ الرئيسية ------------------------------ */
+
+.p-home-secs { margin-bottom: 16px; }
+.p-home-secs-head { display: flex; align-items: center; gap: 8px; margin: 0 2px 10px; }
+.p-home-secs-head h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15.5px; }
+.p-home-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+.p-home-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  min-height: 132px; padding: 14px 10px 12px;
+  border: 1px solid var(--border); border-top: 4px solid var(--sc); border-radius: var(--radius-lg);
+  background: var(--surface); color: var(--text); text-decoration: none; box-shadow: var(--shadow-1);
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.p-home-tile:hover { border-color: var(--sc); box-shadow: var(--shadow-2); transform: translateY(-2px); text-decoration: none; }
+.p-home-tile:active { background: color-mix(in srgb, var(--sc) 8%, var(--surface)); }
+.p-home-tile .p-sec-ico { width: 54px; height: 54px; border-radius: 16px; }
+.p-home-tile b { font-size: 14.5px; line-height: 1.35; }
+.p-home-tile .n { font-size: 12px; font-weight: 700; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ph-flags { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.ph-flag { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 7px; font-variant-numeric: tabular-nums; }
+.ph-flag.bad { background: var(--bad-soft); color: var(--bad); }
+.ph-flag.warn { background: var(--warn-soft); color: var(--warn); }
+
+/* ------------------------------ شاشة القسم ------------------------------ */
+
+.p-sec-hero {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; padding: 12px 16px 16px; margin-bottom: 14px;
+  border-radius: var(--radius-lg); border: 1px solid color-mix(in srgb, var(--sc) 30%, transparent);
+  border-top: 4px solid var(--sc); background: color-mix(in srgb, var(--sc) 9%, var(--surface));
+}
+.p-sec-hero .p-sec-back { flex-basis: 100%; justify-content: flex-start; width: max-content; max-width: 100%; }
+.p-sec-hero .ph-title { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 220px; }
+.p-sec-hero .p-sec-ico { width: 56px; height: 56px; border-radius: 16px; }
+.p-sec-hero h2 { margin: 0; font-size: 20px; line-height: 1.35; }
+.p-sec-hero p { margin: 2px 0 0; font-size: 13px; color: var(--text-3); font-weight: 600; }
+.p-sec-hero .ph-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.p-sec-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.p-sec-count {
+  display: grid; gap: 4px; text-align: start; min-height: 64px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 13px; background: var(--surface); color: var(--text); font: inherit;
+}
+.p-sec-count span { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.p-sec-count b { font-size: 22px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.p-sec-count.ok b { color: var(--ok); }
+.p-sec-count.warn b { color: var(--warn); }
+.p-sec-count.bad b { color: var(--bad); }
+.p-sec-count:hover { border-color: var(--border-strong); }
+.p-sec-count.on { border-color: var(--sc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sc) 35%, transparent); }
+
+/* سطر المادة: التحديد، ثم الاسم وحاله، ثم الرصيد وأزرار الطلب — وخانة
+   الكمية تحتها حين تُحدَّد. */
+.p-mat {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 12px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+/* بلا خانة تحديد (حساب اطّلاع): الاسم يأخذ ما بقي، والرصيد لا يُدفع خارج البطاقة. */
+.p-mat.no-pick { grid-template-columns: minmax(0, 1fr) auto; }
+.p-mat:last-child { border-bottom: 0; }
+.p-mat:hover { background: var(--surface-2); }
+.p-mat.on { background: color-mix(in srgb, var(--sc) 8%, var(--surface)); }
+.p-mat-check {
+  display: grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  border: 2px solid var(--border-strong); border-radius: 9px; background: var(--surface); color: transparent;
+}
+.p-mat.on .p-mat-check { background: var(--sc); border-color: var(--sc); color: #fff; }
+.pm-name { font-weight: 600; line-height: 1.4; }
+.pm-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 2px; font-size: 12px; color: var(--text-3); }
+.pm-side { display: grid; justify-items: end; gap: 6px; }
+.pm-bal { font-size: 15.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pm-bal.zero { color: var(--bad); }
+.pm-ops { display: flex; gap: 4px; }
+.pm-op {
+  display: grid; place-items: center; width: 38px; height: 38px; padding: 0;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text-2);
+}
+.pm-op[data-op] { color: var(--op); background: var(--op-soft); border-color: color-mix(in srgb, var(--op) 30%, transparent); }
+.pm-op:hover { filter: brightness(.97); border-color: var(--op, var(--border-strong)); }
+.pm-qty { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+/* العرض بـ flex-basis: قاعدة الحقول العامة (app.css) تفرض width:100% بأولويةٍ أعلى. */
+.pm-qty input { flex: 0 1 130px; min-width: 0; min-height: 42px; font-size: 16px; font-weight: 700; text-align: center; }
+
+/* شريط المحدَّد: يلتصق بأسفل الشاشة ما دام فيه شيء. */
+.p-pick-bar {
+  position: sticky; bottom: 12px; z-index: 20;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px;
+  border-radius: 14px; border: 1px solid var(--border-strong); background: var(--surface); box-shadow: var(--shadow-3);
+}
+.p-pick-bar[hidden] { display: none; }
+.p-pick-bar .pb-count { display: flex; align-items: center; gap: 6px; }
+.p-pick-bar .pb-count svg { color: var(--ok); flex: none; }
+.p-pick-bar .pb-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-inline-start: auto; }
+.p-pick-bar .pb-acts .btn { min-height: 44px; }
+
+@media (max-width: 860px) {
+  /* فوق الشريط السفلي لا تحته */
+  .p-pick-bar { bottom: calc(66px + 10px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 640px) {
+  .p-home-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .p-home-tile { min-height: 124px; padding: 12px 8px 10px; }
+  .p-sec-hero { padding: 10px 12px 14px; }
+  .p-sec-hero .ph-acts { width: 100%; }
+  .p-sec-hero .ph-acts .btn { flex: 1 1 0; min-width: 0; min-height: 52px; padding: 0 12px; }
+  /* زرّان في نصف الشاشة: «هاتنەژوورەوەی ڕاستەوخۆ» أعرض من نصفها، فيلتفّ
+     الاسم سطرين ولا يُقصّ. */
+  .p-sec-hero .ph-acts .btn, .p-pick-bar .pb-acts .btn {
+    white-space: normal; line-height: 1.3; text-align: center; padding-block: 6px;
+  }
+  .p-sec-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .p-mat { padding: 10px 12px; gap: 6px 10px; }
+  .p-pick-bar .pb-acts { width: 100%; margin-inline-start: 0; }
+  .p-pick-bar .pb-acts .btn { flex: 1 1 0; min-width: 0; min-height: 48px; }
+}
