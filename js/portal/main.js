@@ -168,6 +168,7 @@ export function go(hash) {
 
 let current = null;
 let renderSeq = 0;   // رقم آخر رسم بدأ — وما سبقه قديم
+let homeStale = false;   // تغيّرت الصلاحيات والرئيسية تحت نافذةٍ مفتوحة: تُرسم حين تُغلق
 
 /**
  * كل رسم يكتب في حاوية جديدة تحلّ محلّ القديمة. الشاشة البطيئة التي تنقّل
@@ -185,6 +186,7 @@ export async function render() {
   if (!state.me) return;
   const route = currentRoute();
   const def = ROUTES[route.name];
+  homeStale = false;
   document.title = `${tx(def.title)} — Green City`;
   paintNav(def.nav ?? route.name);
 
@@ -473,8 +475,45 @@ async function start() {
   clear(document.getElementById('me-btn')).append(icon('user', 18));
   await refreshMeta();
   clearInterval(metaTimer);
-  metaTimer = setInterval(refreshMeta, 30 * 1000);
+  metaTimer = setInterval(() => { refreshMeta(); refreshMe(); }, 30 * 1000);
   await render();
+}
+
+/* صلاحيات الحساب تُقرأ ثانيةً مع حالة الحاسوب: ما يعطيه المدير من الحاسوب —
+   الأمانات أو العمال أو «معتمد» — يظهر في الشريط خلال نصف دقيقة، وما يسحبه
+   يغيب، بلا خروجٍ ولا تحديث صفحة. والحساب الموقوف يعود إلى شاشة الدخول. */
+const PERM_KEYS = ['trusted', 'can_in', 'can_out', 'direct_in', 'direct_out', 'can_custody', 'can_workers'];
+
+async function refreshMe() {
+  if (!state.me) return;
+  const before = state.me;
+  let me;
+  try {
+    [me] = await rows(`gc_staff?select=*&id=eq.${encodeURIComponent(currentUserId())}`);
+  } catch {
+    return;   // بلا شبكة: تبقى الصلاحيات كما كانت
+  }
+  if (state.me !== before) return;   // خرج أو دخل غيره في أثناء القراءة
+  if (!me || !me.active) {
+    await signOut();
+    window.dispatchEvent(new CustomEvent('gc-session-lost', { detail: { message: 'حسابك غير مفعّل على الموقع — راجع المدير' } }));
+    return;
+  }
+  state.me = me;
+  const changed = PERM_KEYS.some((key) => me[key] !== before[key]);
+  if (!changed && !homeStale) return;
+  /* شاشةٌ لم تعد له تُستبدل بالرئيسية، والرئيسية تُرسم بأزرارها الجديدة —
+     إلا وفوقها درج طلبٍ أو نافذة: رسمها تحته يقطع ما يفعله فيه، فيتغيّر
+     الشريط الآن وتُرسم هي في قراءةٍ تالية بعد أن تُغلق. وغيرهما — طلبٌ
+     يُكتب — لا يُمسّ: يتغيّر الشريط وحده. */
+  const name = location.hash.replace(/^#\/?/, '').split(/[/?]/)[0] || 'home';
+  const layerOpen = document.getElementById('modals')?.childElementCount > 0;
+  homeStale = false;
+  if (!Object.hasOwn(ROUTES, name) || !allowed(name) || (name === 'home' && !layerOpen)) return render();
+  if (name === 'home') homeStale = true;
+  if (!changed) return;
+  const route = currentRoute();
+  paintNav(ROUTES[route.name].nav ?? route.name);
 }
 
 /* حين يعود الموظف إلى الصفحة بعد غياب تُجدَّد الحالة والشاشة: الهاتف
@@ -482,6 +521,7 @@ async function start() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !state.me) return;
   refreshMeta();
+  refreshMe();
   /* الشاشة تعرض خطأها بنفسها؛ وما أفلت منها — الهاتف بلا شبكة بعدُ — لا
      يصير رفضاً بلا معالج يُرى في الطرفية ولا يُرى في الشاشة. */
   if (Date.now() - state.loadedAt > 60 * 1000) Promise.resolve(current?.refresh?.()).catch(() => {});
