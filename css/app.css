@@ -1312,3 +1312,37 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size
 .gh-howto { border-top: 1px dashed var(--border); padding-top: 10px; }
 .gh-howto summary { cursor: pointer; font-weight: 700; color: var(--text-2); }
 .gh-howto summary:hover { color: var(--text); }
+
+/* ---------------------- الأمانات والعمال على الموقع ----------------------
+   لون العمال والحضور (الأمانات لها لونها في [data-op="custody"]): صلاحية
+   الحساب، وأيقونة عمليّته في «طلبات الموقع». */
+
+[data-perm="workers"] { --op: var(--info); --op-soft: var(--info-soft); --op-ink: var(--info); }
+
+.feed-item .op-who { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; color: var(--text-2); }
+.op-now { padding: 12px 14px 2px; border-radius: 12px; border: 1px dashed var(--border); background: var(--surface-2); }
+.op-now > b { display: flex; align-items: center; gap: 6px; }
+.op-now .facts { margin: 10px 0; }
+
+/* ------------------------------ سيرة الأمانة ------------------------------
+   خطٌّ زمني: التسليم والإعادات والتعديلات — والتعديل خاناتُه «القديم ← الجديد». */
+
+.cust-story { position: relative; display: grid; gap: 0; margin-top: 8px; }
+.cust-story .cs-item { position: relative; display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--border); }
+.cust-story .cs-item:last-child { border-bottom: 0; }
+.cust-story .cs-dot {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px;
+  background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border);
+}
+.cust-story .cs-item[data-kind="issue"] .cs-dot { background: var(--op-custody-soft); color: var(--op-custody-ink); border-color: transparent; }
+.cust-story .cs-item[data-kind="return"] .cs-dot { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.cust-story .cs-item[data-kind="edit"] .cs-dot { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.cust-story .cs-main { flex: 1; min-width: 0; font-size: 13px; line-height: 1.8; }
+.cust-story .cs-head { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.cust-story .cs-head .badge { margin-inline-start: 4px; }
+.cust-story time { display: block; color: var(--text-3); font-size: 12px; }
+.cust-story .cs-changes { margin: 2px 0 0; padding-inline-start: 18px; }
+.cust-story .cs-field { color: var(--text-2); font-weight: 600; }
+.cust-story .cs-old { color: var(--text-3); }
+.cust-story .cs-new { color: var(--text); }
+.cust-story > .hint { padding-top: 6px; }

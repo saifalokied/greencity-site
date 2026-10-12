@@ -5,8 +5,14 @@
    والسحابة تحمل ما يلزم كتابة الطلب وحده: المواد بأقسامها ووحداتها
    وأرصدتها في كل مخزن، والمخازن، والقطاعات والمنازل — بثوانٍ بعد كل
    تعديل ما دام الحاسوب الرئيسي مفتوحاً. ولذلك تُعرض حالة الحاسوب في
-   الأعلى دائماً: «متصل» أو «آخر ظهور قبل ساعتين». والسندات والأمانات
-   والعمال ودفتر الحركة لا تخرج من الحاسوب الرئيسي، فلا شاشة لها هنا.
+   الأعلى دائماً: «متصل» أو «آخر ظهور قبل ساعتين». والسندات ودفتر الحركة
+   لا تخرج من الحاسوب الرئيسي، فلا شاشة لها هنا.
+
+   والأمانات والعمال لمن أعطاه المدير صلاحيتها وحده (can_custody وcan_workers):
+   يعمل عليها من هاتفه «كما أفعل باللابتوب» — يسلّم الأمانة ويعيدها ويمدّدها
+   ويعدّلها ويطبع تعهّدها، ويضيف العامل ويدوّن الحضور (custody.js وworkers.js).
+   وكل فعلٍ عمليةٌ تمرّ بالسحابة إلى الحاسوب كما يمرّ الطلب. ومن لا صلاحية له
+   لا يرى لها زرّاً، ورابطها يفتح له الرئيسية، والسحابة لا تُرجع له صفّاً منها.
 
    والطلب يمرّ بالسحابة ولا يبقى فيها: ينتظر فيها قراره، فإذا قُرِّر
    حُفظ على الهاتف الذي أرسله وحُذف منها (sb.js). فسجلّ طلبات الموظف على
@@ -44,6 +50,14 @@ export const isDirect = (type) => Boolean(state.me?.[type === 'in' ? 'direct_in'
  * تسمح به سياسات ذلك السكربت — حتى يُنفَّذ الجديد.
  */
 export const isTrusted = () => state.me?.trusted !== false;
+
+/**
+ * صلاحيات الأمانات والعمال على الحساب (can_custody وcan_workers). سكربت السحابة
+ * الأقدم لا يعرفهما فيغيبان من السطر: لا صلاحية — فلا جدول لعملياتها هناك.
+ */
+export const hasPerm = (perm) => Boolean(state.me?.[perm]);
+export const canCustody = () => hasPerm('can_custody');
+export const canWorkers = () => hasPerm('can_workers');
 
 /** المواد والمخازن والأرصدة والمخطط — تُحمَّل مرّة وتُجدَّد كل دقيقة عند الحاجة. */
 export async function loadData(force = false) {
@@ -116,27 +130,31 @@ export const sectionColor = (sec) => sec?.color || 'var(--text-3)';
    والقسم (‎#/section/3‎، و0 لـ«بلا قسم») يُفتح من أيقونته في الرئيسية —
    للنوعين: موادّه بأرصدتها، ومنه يُطلب إدخالها أو إخراجها. وليس له زرّ في
    الشريط: nav يُبقي «الرئيسية» مضاءةً وهو مفتوح.
-   والسندات والأمانات (‎#/vouchers‎ و‎#/custody‎) لم تعد هنا: بقيت على
-   الحاسوب الرئيسي، ورابطها المحفوظ يفتح الرئيسية. */
+   والسندات (‎#/vouchers‎) لم تعد هنا: بقيت على الحاسوب الرئيسي، ورابطها
+   المحفوظ يفتح الرئيسية.
+   وperm: شاشةٌ لمن أُعطي صلاحيتها — الأمانات (‎#/custody‎) والعمال والحضور
+   (‎#/workers‎ و‎#/workers/attendance‎). ومن لم يُعطَها يُفتح له رابطها الرئيسية. */
 const ROUTES = {
   home: { title: 'الرئيسية', icon: 'home', view: 'home' },
   section: { title: 'القسم', icon: 'grid', view: 'section', nav: 'home' },
   stock: { title: 'المواد', icon: 'layers', view: 'stock' },
   plan: { title: 'المخطط', icon: 'map', view: 'plan', trusted: true },
+  custody: { title: 'الأمانات', icon: 'opCustody', view: 'custody', perm: 'can_custody' },
+  workers: { title: 'العمال', icon: 'hardhat', view: 'workers', perm: 'can_workers' },
   new: { title: 'طلب جديد', view: 'request' },
 };
 
 /** هل يفتح هذا الحساب الشاشة؟ */
-const allowed = (name) => !ROUTES[name]?.trusted || isTrusted();
+const allowed = (name) => (!ROUTES[name]?.trusted || isTrusted()) && (!ROUTES[name]?.perm || hasPerm(ROUTES[name].perm));
 
 export function currentRoute() {
   const raw = location.hash.replace(/^#\/?/, '');
   const [path, query = ''] = raw.split('?');
   const [name, ...rest] = path.split('/');
   if (name && (!Object.hasOwn(ROUTES, name) || !allowed(name))) {
-    /* طالبٌ كتب ‎#/plan‎ بيده — أو فتح رابطاً أرسله له معتمد — أو رابطٌ
-       محفوظ لشاشةٍ لم تعد في الموقع (‎#/vouchers‎): يرى الرئيسية، والعنوان
-       يُصحَّح معها فلا يبقى فيه ما لا يُعرض. */
+    /* طالبٌ كتب ‎#/plan‎ بيده — أو فتح رابطاً أرسله له معتمد، أو رابط الأمانات
+       وليست له — أو رابطٌ محفوظ لشاشةٍ لم تعد في الموقع (‎#/vouchers‎): يرى
+       الرئيسية، والعنوان يُصحَّح معها فلا يبقى فيه ما لا يُعرض. */
     history.replaceState(null, '', '#/home');
     return { name: 'home', param: '', query: {} };
   }
@@ -177,7 +195,11 @@ export async function render() {
   const content = freshContent();
   content.append(h('div', { class: 'skeleton', style: 'height:120px;border-radius:16px' }));
   try {
-    const mod = def.view === 'request' ? await import('./request.js') : await import('./views.js');
+    /* كل شاشةٍ من وحدتها، تُحمَّل حين تُفتح: من لا يملك الأمانات لا يحمّل شيفرتها. */
+    const mod = def.view === 'request' ? await import('./request.js')
+      : def.view === 'custody' ? await import('./custody.js')
+        : def.view === 'workers' ? await import('./workers.js')
+          : await import('./views.js');
     if (stale()) return;
     const result = await mod[def.view]({ content: clear(content), route });
     if (stale()) {
@@ -199,7 +221,7 @@ window.addEventListener('hashchange', render);
 function paintNav(active) {
   const any = canRequest('in') || canRequest('out');
   const nav = clear(document.getElementById('p-nav'));
-  for (const name of ['home', 'stock', 'plan'].filter(allowed)) {
+  for (const name of ['home', 'stock', 'plan', 'custody', 'workers'].filter(allowed)) {
     nav.append(h('a', { href: `#/${name}`, class: active === name ? 'active' : null },
       icon(ROUTES[name].icon, 17), ROUTES[name].title));
   }
@@ -209,9 +231,16 @@ function paintNav(active) {
   const fab = any ? h('button', { class: 'fab', title: 'طلب جديد', onclick: chooseRequest }, icon('plus', 26)) : null;
   const bar = clear(document.getElementById('tabbar'));
   /* المعتمد: الرئيسية والمواد، وزرّ الطلب، والمخطط. والطالب: طلباته،
-     وزرّ الطلب في الوسط تحت إبهامه، والمواد. وحساب الاطّلاع بلا زرّ طلب. */
-  const tabs = isTrusted() ? [tab('home'), tab('stock'), fab, tab('plan')] : [tab('home'), fab, tab('stock')];
-  bar.append(...tabs.filter(Boolean));
+     وزرّ الطلب في الوسط تحت إبهامه، والمواد. وحساب الاطّلاع بلا زرّ طلب.
+     ومن له الأمانات أو العمال: أزرارهما بعد زرّ الطلب. والشريط خمسة أزرار
+     على الأكثر — تحت الإبهام على شاشة 360 بكسلاً: فإن زاد خرج منه المخطط،
+     ويُفتح من «المخطط» في الرئيسية. */
+  const names = ['home', 'stock', 'plan', 'custody', 'workers'].filter(allowed);
+  if (names.length + (fab ? 1 : 0) > 5) names.splice(names.indexOf('plan'), 1);
+  const tabs = names.map(tab);
+  /* زرّ الطلب في الوسط: بعد نصف الأزرار — وفي العدد الفرديّ بعد أكثرها. */
+  if (fab) tabs.splice(Math.ceil(names.length / 2), 0, fab);
+  bar.append(...tabs);
   bar.style.gridTemplateColumns = `repeat(${bar.children.length}, 1fr)`;
 }
 
@@ -502,7 +531,10 @@ function accountMenu() {
       h('div', {}, h('div', { class: 'small muted', style: 'margin-bottom:6px' }, 'صلاحياتك على الموقع'),
         h('div', { class: 'chips' }, h('span', { class: 'chip' }, icon('eye', 14), 'المواد وأرصدتها'),
           isTrusted() ? h('span', { class: 'chip' }, icon('map', 14), 'المخطط') : null,
-          ...perms.map((p) => h('span', { class: 'chip' }, icon('check', 14), p)))),
+          ...perms.map((p) => h('span', { class: 'chip' }, icon('check', 14), p)),
+          /* الأمانات والعمال: «مباشرة» للمعتمد، و«بموافقة المدير» للطالب — كما تصل عملياته. */
+          canCustody() ? h('span', { class: 'chip' }, icon('opCustody', 14), isTrusted() ? 'الأمانات مباشرة' : 'الأمانات بموافقة المدير') : null,
+          canWorkers() ? h('span', { class: 'chip' }, icon('hardhat', 14), isTrusted() ? 'العمال مباشرة' : 'العمال بموافقة المدير') : null)),
       h('div', { class: 'info-box' }, icon('phone', 18), h('div', {},
         h('b', {}, 'على الهاتف'),
         h('div', { class: 'small' }, 'من قائمة المتصفّح اختر «الإضافة إلى الشاشة الرئيسية» ليفتح الموقع كتطبيق.'))),

@@ -9,6 +9,10 @@
    وطلبات الموظف في سجلّ هاتفه (sb.js): السحابة تحمل الطلب حتى يُقرَّر،
    فإذا وصل قراره إلى الهاتف الذي أرسله حُفظ فيه وحُذف منها. وما أُرسل من
    جهازٍ آخر للحساب لا يُعرض هنا: قراره لذلك الجهاز.
+
+   ومن أُعطي «الأمانات» أو «العمال والحضور»: زرّاهما في الرئيسية، وتحت
+   «طلباتي» عملياته عليهما بحالها وقرارها (people.js) — وشاشتاهما في
+   custody.js وworkers.js.
    ===================================================================== */
 
 import {
@@ -19,7 +23,9 @@ import { OPS, opIcon } from '../ops.js';
 import { all, withdraw, settleRequests, ackRequest, localHistory, currentUserId, storageKept } from './sb.js';
 import {
   state, loadData, canRequest, requestTitle, requestHint, pcOnline, isTrusted, bySection, sectionColor, NO_SECTION, go,
+  canCustody, canWorkers,
 } from './main.js';
+import { homeOps, kindIcon } from './people.js';
 
 /* ------------------------------ الطلبات ------------------------------ */
 
@@ -101,6 +107,8 @@ export async function home({ content }) {
   const perms = [
     me.can_in ? (me.direct_in ? 'إدخال مباشر' : 'طلب إدخال') : null,
     me.can_out ? (me.direct_out ? 'إخراج مباشر' : 'طلب إخراج') : null,
+    canCustody() ? 'الأمانات' : null,
+    canWorkers() ? 'العمال والحضور' : null,
   ].filter(Boolean);
 
   content.append(h('div', { class: 'hello' },
@@ -114,10 +122,18 @@ export async function home({ content }) {
       ...perms.map((p) => h('span', {}, p)))));
 
   const types = ['in', 'out'].filter(canRequest);
-  if (types.length) {
+  /* الأمانات والعمال لمن أُعطيهما: زرّان بجانب الطلب — بلونيهما. */
+  const people = [
+    canCustody() ? h('a', { href: '#/custody', 'data-op': 'custody' }, opIcon('custody', 22, true),
+      h('div', {}, h('b', {}, 'الأمانات'), h('small', {}, 'تسليمٌ وإعادة وتعهّد'))) : null,
+    canWorkers() ? h('a', { href: '#/workers', 'data-op': 'workers' }, kindIcon('worker_add', 22, true),
+      h('div', {}, h('b', {}, 'العمال والحضور'), h('small', {}, 'الملفّات والحضور اليومي'))) : null,
+  ].filter(Boolean);
+  if (types.length || people.length) {
     content.append(h('div', { class: 'quick' },
       ...types.map((type) => h('a', { href: `#/new/${type}`, 'data-op': type },
         opIcon(type, 22, true), h('div', {}, h('b', {}, requestTitle(type)), h('small', {}, requestHint(type))))),
+      ...people,
       h('a', { href: '#/stock', 'data-op': 'opening' }, opIcon('opening', 22, true),
         h('div', {}, h('b', {}, 'المواد'), h('small', {}, 'بأقسامها وأرصدتها')))));
   } else {
@@ -150,7 +166,9 @@ export async function home({ content }) {
       h('div', { class: 'p-history-note' }, icon('phone', 14),
         h('span', {}, 'سجلّ طلباتك محفوظ على هذا الجهاز — وما أرسلته من جهازٍ آخر يُحفظ هناك.'))),
     keepBox, list);
-  content.append(secBox, card);
+  /* عمليات الأمانات والعمال تحت الطلبات — لمن له صلاحيتهما، أو عمليات على جهازه. */
+  const opsBox = homeOps();
+  content.append(secBox, card, opsBox?.node ?? null);
 
   /* القائمة أربعون أربعون: سجلّ سنةٍ كاملة لا يُرسم دفعةً على الهاتف. */
   const PAGE = 40;
@@ -167,6 +185,8 @@ export async function home({ content }) {
       clear(secBox);
       if (tiles) secBox.append(tiles);
     });
+    /* والعمليات مع الطلبات لا بعدها: تعذّرها لا يحبس «طلباتي». */
+    opsBox?.refresh().catch(() => {});
     const uid = currentUserId();
     let mine = [];
     let problem = null;

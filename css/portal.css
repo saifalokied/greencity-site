@@ -404,3 +404,152 @@ body.portal { background: var(--bg); }
   .p-pick-bar .pb-acts { width: 100%; margin-inline-start: 0; }
   .p-pick-bar .pb-acts .btn { flex: 1 1 0; min-width: 0; min-height: 48px; }
 }
+
+/* ==========================================================================
+   الأمانات والعمال على الموقع — لمن أُعطي صلاحيتهما
+   بطاقاتٌ تحت الإبهام لا جداول عريضة، والأزرار 44 بكسلاً. ولون الأمانات من
+   [data-op="custody"] في app.css، ولون العمال والحضور هنا (أزرق «المعلومة»).
+   وما أُرسل ولم يُقرَّر يُعرض على سطره بعلامة الانتظار (.p-wait).
+   ========================================================================== */
+
+[data-op="workers"] { --op: var(--info); --op-soft: var(--info-soft); --op-ink: var(--info); }
+
+/* قيمة الخانة في الدرج قد تحمل اسماً كتبه إنسان (span بلا ترجمة): app.css
+   يجعل كل span في .fact عنوانَ الخانة الصغير — وهذه قيمةٌ لا عنوان. */
+.fact b span { display: inline; margin: 0; font-size: inherit; font-weight: inherit; color: inherit; }
+
+/* رقم الأمانة ورمز العامل كلمةٌ واحدة: لا يُكسر عند الشرطة («AMN-» ثم «2026-0011»). */
+.p-code { white-space: nowrap; direction: ltr; unicode-bidi: isolate; }
+
+/* حال العملية: «سُجّلت» بلون الطلب الذي صار سنداً. */
+.req-state.applied { background: var(--ok-soft); color: var(--ok); }
+
+/* ------------------------------ الرأس والتبويب ------------------------------ */
+
+.p-people-head { align-items: center; }
+.p-people-head .page-actions input[type=date] { min-height: 40px; }
+.p-tabs { display: flex; width: max-content; max-width: 100%; margin-bottom: 14px; }
+.p-tabs button { min-height: 40px; }
+.p-filter { flex-wrap: wrap; }
+.p-filter button { height: 38px; }
+.p-count { font-variant-numeric: tabular-nums; opacity: .85; }
+
+/* ------------------------------ علامة الانتظار ------------------------------ */
+
+.p-wait {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 8px;
+  font-size: 12px; font-weight: 700; line-height: 1.6;
+  background: var(--surface-3); color: var(--text-2); border: 1px dashed var(--border-strong);
+}
+.p-wait svg { flex: none; }
+.p-wait.held { background: var(--warn-soft); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.p-wait.done { background: var(--ok-soft); color: var(--ok); border-style: solid; border-color: transparent; }
+.pc-waits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.p-wait-feed { margin-top: 6px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+
+/* ------------------------------ البطاقات ------------------------------ */
+
+.p-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.p-cust, .p-worker, .p-citem {
+  display: block; width: 100%; padding: 12px 14px; text-align: start; font: inherit; color: var(--text);
+  border: 1px solid var(--border); border-inline-start: 4px solid var(--op, var(--border-strong));
+  border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-1);
+}
+.p-cust { --op: var(--op-custody); }
+.p-worker { --op: var(--info); }
+.p-citem { --op: var(--op-custody); }
+button.p-cust:hover, button.p-worker:hover { border-color: var(--op); }
+button.p-cust:active, button.p-worker:active { background: var(--surface-2); }
+.p-cust.late { border-inline-start-color: var(--bad); }
+.p-cust.draft, .p-worker.draft, .p-citem.draft { border-style: dashed; border-inline-start-style: solid; background: var(--surface-2); }
+.p-worker.off, .p-citem.off { opacity: .7; }
+.pc-top { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+.pc-top b { font-size: 15px; }
+.pc-nonum { font-size: 12.5px; font-weight: 600; color: var(--text-3); }
+.pc-item { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 6px; line-height: 1.5; }
+.pc-item > b { min-width: 0; font-weight: 600; }
+.pc-qty { flex: none; font-weight: 700; color: var(--op-custody-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pc-meta { margin-top: 3px; font-size: 12.5px; color: var(--text-3); line-height: 1.6; }
+.pc-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.pc-nums > div { padding: 6px 8px; border-radius: 9px; background: var(--surface-2); }
+.pc-nums span { display: block; font-size: 11.5px; font-weight: 600; color: var(--text-3); }
+.pc-nums b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.pc-nums .warn b { color: var(--warn); }
+.pc-nums .bad b { color: var(--bad); }
+.pc-nums .ok b { color: var(--ok); }
+
+/* ------------------------------ نموذج التسليم ------------------------------ */
+
+.p-lines { display: grid; gap: 8px; }
+.p-line { padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.p-line-main { display: grid; grid-template-columns: minmax(0, 1fr) 110px auto; gap: 8px; align-items: end; }
+.p-line-main .icon-btn { margin-bottom: 4px; }
+.p-new-item { margin-top: 8px; }
+.p-new-item[hidden] { display: none; }
+
+/* ------------------------------ سيرة الأمانة ------------------------------
+   خطٌّ زمني: التسليم والإعادات والتعديلات — والتعديل خاناتُه «القديم ← الجديد». */
+
+.p-story { display: grid; margin-top: 8px; }
+.p-story .ps-item { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--border); }
+.p-story .ps-item:last-of-type { border-bottom: 0; }
+.p-story .ps-dot {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px;
+  background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border);
+}
+.p-story .ps-item[data-kind="issue"] .ps-dot { background: var(--op-custody-soft); color: var(--op-custody-ink); border-color: transparent; }
+.p-story .ps-item[data-kind="return"] .ps-dot { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.p-story .ps-item[data-kind="edit"] .ps-dot { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.p-story .ps-main { flex: 1; min-width: 0; font-size: 13px; line-height: 1.8; }
+.p-story .ps-head { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.p-story time { display: block; color: var(--text-3); font-size: 12px; }
+.p-story .ps-changes { margin: 2px 0 0; padding-inline-start: 18px; }
+.p-story .ps-field { color: var(--text-2); font-weight: 600; }
+.p-story .ps-old { color: var(--text-3); }
+.p-story > .hint { padding-top: 6px; }
+
+/* ------------------------------ الحضور ------------------------------ */
+
+.p-day { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 12px; }
+.p-day > svg { color: var(--info); }
+.p-att { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+.p-att-row {
+  display: grid; gap: 8px; padding: 11px 13px; border-radius: 14px; background: var(--surface);
+  border: 1px solid var(--border); border-inline-start: 4px solid var(--border-strong); box-shadow: var(--shadow-1);
+}
+.p-att-row.is-present { border-inline-start-color: var(--ok); }
+.p-att-row.is-absent { border-inline-start-color: var(--bad); }
+.p-att-row.is-leave { border-inline-start-color: var(--info); }
+.p-att-row.waiting { background: var(--surface-2); }
+.pa-who { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.pa-who b { font-size: 15px; }
+.pa-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pa-seg button { justify-content: center; height: 42px; padding: 0 6px; }
+.pa-seg button.on.present { background: var(--ok); color: #fff; }
+.pa-seg button.on.absent { background: var(--bad); color: #fff; }
+.pa-seg button.on.leave { background: var(--info); color: #fff; }
+:root[data-theme="dark"] .pa-seg button.on { color: #07110d; }
+.pa-times { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--text-2); }
+.pa-times b { font-variant-numeric: tabular-nums; color: var(--text); }
+.pa-times .btn { margin-inline-start: auto; min-height: 40px; }
+
+@media (max-width: 640px) {
+  .p-cards, .p-att { grid-template-columns: 1fr; gap: 8px; }
+  .p-tabs { width: 100%; }
+  .p-tabs button { flex: 1 1 0; justify-content: center; }
+  .p-toolbar > input[type=search] { flex-basis: 100%; }
+  .p-filter { width: 100%; }
+  .p-filter button { flex: 1 1 0; justify-content: center; padding: 0 8px; }
+  .p-people-head .page-actions { width: 100%; margin-inline-start: 0; }
+  .p-people-head .page-actions .btn { flex: 1 1 auto; min-height: 46px; justify-content: center; }
+  .p-people-head .page-actions input[type=date] { flex: 1 1 140px; }
+  /* العدّادات صفٌّ واحد على الهاتف — ثلاثةٌ أو أربعة — بلا شروحها: تُقرأ من النظرة. */
+  .p-kpis { grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 6px; margin-bottom: 12px; }
+  .p-kpis .kpi { padding: 9px 10px; }
+  .p-kpis .kpi .k-icon, .p-kpis .kpi .k-hint { display: none; }
+  .p-kpis .kpi .k-label { font-size: 11.5px; line-height: 1.35; }
+  .p-kpis .kpi .k-value { margin-top: 3px; font-size: 19px; }
+  .p-line-main { grid-template-columns: minmax(0, 1fr) 84px auto; }
+  /* درج الأمانة: أزرار الأفعال تلتفّ صفّين تحت الإبهام. */
+  .drawer-foot .btn { min-height: 44px; }
+}

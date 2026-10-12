@@ -1,6 +1,7 @@
 /* ======================= الاتصال بالسحابة من الموقع =======================
    طبقة رقيقة فوق Supabase بلا مكتبة: الدخول، وتجديد الجلسة، وقراءة
-   الجداول، وكتابة الطلبات — ومعرّف هذا الجهاز، وسجلّ الطلبات عليه (آخر الملف).
+   الجداول، وكتابة الطلبات وعمليات الأمانات والعمال — ومعرّف هذا الجهاز،
+   وسجلّ الطلبات والعمليات عليه (آخر الملف).
 
    المفتاح هنا anon — عامّ بطبعه، يحمله كل متصفّح. لا يمنح شيئاً بذاته:
    ما يقرؤه الموظف وما يطلبه تقرّره السياسات في القاعدة على حسابه هو.
@@ -220,13 +221,7 @@ export async function rpc(name, body = {}) {
  */
 export async function withdraw(id, row = null) {
   const done = (await rpc('gc_withdraw_request', { request_id: id })) === true;
-  if (done) {
-    const uid = currentUserId();
-    const list = readHistory(uid) ?? [];
-    const had = list.find((e) => String(e.id) === String(id));
-    const entry = { ...toEntry(had ?? row ?? { id }, 'withdrawn'), status: 'withdrawn' };
-    writeHistory(uid, pruneHistory([entry, ...list.filter((e) => String(e.id) !== String(id))]));
-  }
+  if (done) requestLog.withdrawn(currentUserId(), id, row);
   return done;
 }
 
@@ -245,7 +240,7 @@ export async function ackRequest(id, seen = {}) {
 }
 
 /* ------------------------------ هذا الجهاز ------------------------------
-   لكل متصفّح معرّفٌ عشوائيّ يُنشأ أوّل مرّة ويُحفظ (gc-portal-device)، ويحمله
+   لكل متصفّحٍ معرّفٌ عشوائيّ يُنشأ أوّل مرّة ويُحفظ (gc-portal-device)، ويحمله
    كل طلبٍ يُرسل منه: إليه وحده يعود قراره. فهاتفٌ ثانٍ للحساب — أو المتصفّح
    نفسه بعد أن مُسح تخزينه — لا يعرض الطلب ولا يتسلّم قراره فيحذفه من السحابة
    قبل أن يصل إلى الهاتف الذي أرسله.
@@ -307,6 +302,11 @@ export function storageKept() {
 
    وlocal_status ما جرى للطلب على هذا الجهاز: sent أُرسل منه · adopted أُخذ
    من السحابة أوّل مرّة · acked وصل قراره وحُذف من السحابة · withdrawn سُحب.
+
+   وعمليات الأمانات والعمال (gc_ops) تمرّ بالسحابة كما يمرّ الطلب، بالقواعد
+   نفسها حرفاً بحرف: الجهاز والتسلّم بما حُفظ والسحب والأخذ القديم. فالسجلّ
+   أداةٌ واحدة (deviceLog) يأخذها كلٌّ بمفتاحه وحالاته وأعمدته — ولا تُكتب
+   القواعد مرّتين فتفترقا يوماً. سجلّ العمليات أسفل سجلّ الطلبات.
    ===================================================================== */
 
 export const HISTORY_MAX = 300;
@@ -321,9 +321,6 @@ export const LIVE_STATUSES = ['pending', 'received'];
    وعادت بعد أن حُفظ القرار هنا أو سُحب الطلب لا تُرجعه إلى الانتظار — وإلا
    عُدّ بعدها «لم يصل قراره» وقد وصل وحُذف من السحابة. */
 const STAGE = { pending: 0, received: 1, posted: 2, rejected: 2, cancelled: 3, withdrawn: 3 };
-const stage = (status) => STAGE[status] ?? 0;
-
-export const historyKey = (uid) => `gc-portal-requests:${uid}`;
 
 /* ما يحفظه الجهاز من الطلب، بقيمته حين يغيب. */
 /* وupdated_at آخر تغييرٍ على القرار في السحابة: به يُحذف منها ما حُفظ هنا
@@ -335,184 +332,336 @@ const ENTRY = {
   voucher_number: '', decided_by: '', decided_at: null, updated_at: null, read_at: null,
 };
 
-/** سطر السحابة — أو الطلب المرسَل — بما يحفظه الجهاز منه. */
-export function toEntry(row, localStatus = row?.local_status ?? '') {
-  const out = {};
-  for (const [key, fallback] of Object.entries(ENTRY)) out[key] = row?.[key] ?? fallback;
-  out.lines = Array.isArray(row?.lines) ? row.lines : [];
-  out.local_status = localStatus;
-  return out;
-}
-
 const time = (value) => Date.parse(value ?? '') || 0;
 /** آخر ما جرى على الطلب: قراره، وإلا إرساله. */
 const lastActivity = (e) => Math.max(time(e.decided_at), time(e.created_at));
 /** الأحدث إرسالاً أوّلاً — كما تُعرض الطلبات. */
 export const byCreated = (a, b) => time(b.created_at) - time(a.created_at) || String(b.id).localeCompare(String(a.id));
 
-/**
- * آخر 300 طلب في سنة، بآخر ما جرى عليها: الطلب القديم الذي قُرِّر اليوم
- * يبقى. والأحدث أوّلاً — فإن امتلأ التخزين حُفظ أوّله (writeHistory).
- */
-export function pruneHistory(list, now = Date.now()) {
-  const since = now - HISTORY_DAYS * 24 * 3600 * 1000;
-  const seen = new Set();
-  return list
-    .filter((e) => {
-      if (!e?.id || seen.has(String(e.id))) return false;
-      seen.add(String(e.id));
-      const at = lastActivity(e);
-      return !at || at >= since;
-    })
-    .sort((a, b) => lastActivity(b) - lastActivity(a))
-    .slice(0, HISTORY_MAX);
-}
-
 /** طلبٌ كُتب قبل أن يحمل الطلب معرّف جهازه. */
 const legacy = (row) => row.device === null || row.device === undefined || row.device === '';
 
-/* سطرٌ من قراءةٍ أقدم ممّا حُفظ هنا لا يغلبه: الطلب لا يرجع مرحلةً (STAGE)، وفي
-   المرحلة نفسها — سندٌ عُدّل رقمه — لا تغلب قراءةٌ بدأت قبل التي حُفظ منها.
-   صفحتان مفتوحتان على الهاتف: الثانية قرأت الرقم الجديد فحفظته وحُذف من
-   السحابة، ثم عادت قراءة الأولى بالرقم القديم — فلولا هذا بقي القديم هنا ولم
-   يُصحَّح أبداً. */
-const older = (row, had, readAt) => stage(row.status) < stage(had.status)
-  || (stage(row.status) === stage(had.status) && readAt < (Number(had.read_at) || 0));
-
 /**
- * يدمج طلبات الحساب في السحابة بسجلّ الجهاز — والسحابة تغلب في كل ما
- * تعرفه، وlocal_status للجهاز.
- *   stored  سجلّ الجهاز، أو null إن لم يكن له سجلّ بعد.
- *   cloud   طلبات الحساب في السحابة — كلّها، لا صفحةً منها. وسطرٌ فيها أقدم
- *           ممّا حُفظ (older) لا يغلب: القراءة بدأت قبل أن يُحفظ.
- *   now     متى بدأت قراءة cloud (views.js) — ويُحفظ مع ما أُخذ منها (read_at).
- *   device  معرّف هذا الجهاز (deviceId).
- * وطلبات الجهاز من السحابة: ما في سجلّه، وما يحمل معرّفه — وطلبات ما قبل هذا
- * الإصدار (بلا معرّف) إن لم يكن له سجلّ بعد. وما سوى ذلك لجهازٍ آخر: لا يُعرض
- * هنا ولا يُتسلَّم، فيصل قراره إلى الجهاز الذي أرسله.
- * ويُرجع:
- *   list  ما يُحفظ على الجهاز.
- *   ack   ما وصل قراره من طلبات الجهاز — يُحذف من السحابة بعد أن يُحفظ.
- *   view  ما يُعرض: طلبات الجهاز. وطلبٌ له ينتظر ولم يعد في السحابة (gone):
- *         سُحب، أو أخذه جهازٌ آخر قبل هذا الإصدار، أو حذفه الحاسوب بعد ثلاثين
- *         يوماً — لا يُعرف قراره هنا.
+ * سجلٌّ على هذا الجهاز لما يمرّ بالسحابة ولا يبقى فيها: الطلبات، وعمليات
+ * الأمانات والعمال. spec:
+ *   prefix  مفتاح التخزين قبل معرّف الحساب (gc-portal-requests:<معرّفه>).
+ *   fields  ما يُحفظ من السطر، بقيمته حين يغيب (ENTRY).
+ *   shape   ما يُصحَّح بعد النسخ: البنود مصفوفةٌ دائماً، والبيانات كائن.
+ *   stages  مراحل الحالات (STAGE): ما يمضي ولا يرجع.
+ *   final   حالات القرار — بعدها يُحذف من السحابة.
+ *   live    ما زال ينتظر — في السحابة حتى يُقرَّر.
+ *   max     كم يُحفظ منه (و HISTORY_DAYS مدّته).
  */
-export function mergeHistory(stored, cloud, now = Date.now(), device = deviceId()) {
-  const adopt = !Array.isArray(stored);
-  const mine = new Map();
-  for (const e of adopt ? [] : stored) if (e?.id) mine.set(String(e.id), e);
-  const inCloud = new Map();
-  for (const r of Array.isArray(cloud) ? cloud : []) if (r?.id) inCloud.set(String(r.id), r);
+function deviceLog({ prefix, fields, shape = () => {}, stages, final, live, max = HISTORY_MAX }) {
+  const key = (uid) => `${prefix}:${uid}`;
+  const stage = (status) => stages[status] ?? 0;
 
-  const fromCloud = (row, localStatus) => ({ ...toEntry(row, localStatus), read_at: now });
-  for (const [id, row] of inCloud) {
-    const had = mine.get(id);
-    if (had) mine.set(id, older(row, had, now) ? had : fromCloud(row, had.local_status || 'sent'));
-    else if (device && String(row.device ?? '') === String(device)) mine.set(id, fromCloud(row, 'sent'));
-    else if (adopt && legacy(row)) mine.set(id, fromCloud(row, 'adopted'));
+  /** سطر السحابة — أو المرسَل — بما يحفظه الجهاز منه. */
+  function toEntry(row, localStatus = row?.local_status ?? '') {
+    const out = {};
+    for (const [name, fallback] of Object.entries(fields)) out[name] = row?.[name] ?? fallback;
+    shape(row, out);
+    out.local_status = localStatus;
+    return out;
   }
 
-  const list = pruneHistory([...mine.values()], now);
-  /* ويُحذف ما حُفظ قراره كما هو في السحابة الآن — لا ما بقي هنا على قرارٍ بعده. */
-  const ack = list.filter((e) => {
-    const status = inCloud.get(String(e.id))?.status;
-    return FINAL_STATUSES.includes(status) && status === e.status;
-  }).map((e) => e.id);
-  const view = list.map((e) => (LIVE_STATUSES.includes(e.status) && !inCloud.has(String(e.id)) ? { ...e, gone: true } : e))
-    .sort(byCreated);
-  return { list, ack, view };
+  /**
+   * آخر max في سنة، بآخر ما جرى عليها: القديم الذي قُرِّر اليوم يبقى.
+   * والأحدث أوّلاً — فإن امتلأ التخزين حُفظ أوّله (write).
+   */
+  function prune(list, now = Date.now()) {
+    const since = now - HISTORY_DAYS * 24 * 3600 * 1000;
+    const seen = new Set();
+    return list
+      .filter((e) => {
+        if (!e?.id || seen.has(String(e.id))) return false;
+        seen.add(String(e.id));
+        const at = lastActivity(e);
+        return !at || at >= since;
+      })
+      .sort((a, b) => lastActivity(b) - lastActivity(a))
+      .slice(0, max);
+  }
+
+  /* سطرٌ من قراءةٍ أقدم ممّا حُفظ هنا لا يغلبه: لا يرجع مرحلةً (stages)، وفي
+     المرحلة نفسها — سندٌ عُدّل رقمه — لا تغلب قراءةٌ بدأت قبل التي حُفظ منها.
+     صفحتان مفتوحتان على الهاتف: الثانية قرأت الرقم الجديد فحفظته وحُذف من
+     السحابة، ثم عادت قراءة الأولى بالرقم القديم — فلولا هذا بقي القديم هنا ولم
+     يُصحَّح أبداً. */
+  const older = (row, had, readAt) => stage(row.status) < stage(had.status)
+    || (stage(row.status) === stage(had.status) && readAt < (Number(had.read_at) || 0));
+
+  /**
+   * يدمج ما للحساب في السحابة بسجلّ الجهاز — والسحابة تغلب في كل ما تعرفه،
+   * وlocal_status للجهاز.
+   *   stored  سجلّ الجهاز، أو null إن لم يكن له سجلّ بعد.
+   *   cloud   ما للحساب في السحابة — كلّه، لا صفحةً منه. وسطرٌ فيه أقدم ممّا
+   *           حُفظ (older) لا يغلب: القراءة بدأت قبل أن يُحفظ.
+   *   now     متى بدأت قراءة cloud — ويُحفظ مع ما أُخذ منها (read_at).
+   *   device  معرّف هذا الجهاز (deviceId).
+   * وما للجهاز من السحابة: ما في سجلّه، وما يحمل معرّفه — وما قبل هذا
+   * الإصدار (بلا معرّف) إن لم يكن له سجلّ بعد. وما سوى ذلك لجهازٍ آخر: لا
+   * يُعرض هنا ولا يُتسلَّم، فيصل قراره إلى الجهاز الذي أرسله.
+   * ويُرجع:
+   *   list  ما يُحفظ على الجهاز.
+   *   ack   ما وصل قراره ممّا للجهاز — يُحذف من السحابة بعد أن يُحفظ.
+   *   view  ما يُعرض: ما للجهاز. وما ينتظر ولم يعد في السحابة (gone): سُحب،
+   *         أو أخذه جهازٌ آخر قبل هذا الإصدار، أو حذفه الحاسوب بعد ثلاثين
+   *         يوماً — لا يُعرف قراره هنا.
+   */
+  function merge(stored, cloud, now = Date.now(), device = deviceId()) {
+    const adopt = !Array.isArray(stored);
+    const mine = new Map();
+    for (const e of adopt ? [] : stored) if (e?.id) mine.set(String(e.id), e);
+    const inCloud = new Map();
+    for (const r of Array.isArray(cloud) ? cloud : []) if (r?.id) inCloud.set(String(r.id), r);
+
+    const fromCloud = (row, localStatus) => ({ ...toEntry(row, localStatus), read_at: now });
+    for (const [id, row] of inCloud) {
+      const had = mine.get(id);
+      if (had) mine.set(id, older(row, had, now) ? had : fromCloud(row, had.local_status || 'sent'));
+      else if (device && String(row.device ?? '') === String(device)) mine.set(id, fromCloud(row, 'sent'));
+      else if (adopt && legacy(row)) mine.set(id, fromCloud(row, 'adopted'));
+    }
+
+    const list = prune([...mine.values()], now);
+    /* ويُحذف ما حُفظ قراره كما هو في السحابة الآن — لا ما بقي هنا على قرارٍ بعده. */
+    const ack = list.filter((e) => {
+      const status = inCloud.get(String(e.id))?.status;
+      return final.includes(status) && status === e.status;
+    }).map((e) => e.id);
+    const view = list.map((e) => (live.includes(e.status) && !inCloud.has(String(e.id)) ? { ...e, gone: true } : e))
+      .sort(byCreated);
+    return { list, ack, view };
+  }
+
+  /** سجلّ الحساب على هذا الجهاز — أو null إن لم يكن له سجلّ بعد، أو تعذّرت قراءته. */
+  function read(uid) {
+    if (!uid) return null;
+    try {
+      const raw = localStorage.getItem(key(uid));
+      if (raw === null || raw === undefined) return null;
+      const list = JSON.parse(raw);
+      return Array.isArray(list) ? list : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * يحفظ السجلّ ويُرجع ما حُفظ فعلاً — أو null إن لم يُحفظ شيء، ويبقى
+   * المحفوظ قبله كما كان. فإن امتلأ التخزين حُفظ أحدثه: نصفه ثم ربعه…
+   * حتى عشرين — فالقرار الذي وصل الآن يُحفظ ولو سقط ما قبل أشهر.
+   */
+  function write(uid, list) {
+    if (!uid) return null;
+    for (let n = list.length; ; n = Math.floor(n / 2)) {
+      const part = list.slice(0, n);
+      try {
+        localStorage.setItem(key(uid), JSON.stringify(part));
+        return part;
+      } catch {
+        if (n <= 20) return null;
+      }
+    }
+  }
+
+  /** ما للحساب على هذا الجهاز وحده — حين تتعذّر السحابة. */
+  const local = (uid) => (read(uid) ?? []).map((e) => toEntry(e)).sort(byCreated);
+
+  /**
+   * يحفظ في سجلّ الجهاز ما أُرسل منه — بانتظار الحاسوب الرئيسي. وما فيه من
+   * قبل (إعادة إرسالٍ بعد انقطاع) يبقى كما حُفظ: ما في السحابة هو الإرسال
+   * الأول، وهو يغلب حين يُقرأ.
+   */
+  function remember(uid, sent, now = Date.now()) {
+    if (!uid || !sent?.id) return false;
+    const list = read(uid) ?? [];
+    if (list.some((e) => String(e.id) === String(sent.id))) return true;
+    const entry = toEntry({ ...sent, status: 'pending', created_at: new Date(now).toISOString() }, 'sent');
+    return Boolean(write(uid, prune([entry, ...list], now)));
+  }
+
+  /** سُحب من السحابة: يبقى في السجلّ «مسحوباً» — بما حُفظ منه، أو بما عُرض. */
+  function withdrawn(uid, id, row = null) {
+    const list = read(uid) ?? [];
+    const had = list.find((e) => String(e.id) === String(id));
+    const entry = { ...toEntry(had ?? row ?? { id }, 'withdrawn'), status: 'withdrawn' };
+    write(uid, prune([entry, ...list.filter((e) => String(e.id) !== String(id))]));
+  }
+
+  /* ما يُحذف الآن من السحابة — فتحديثان متقاربان لا يحذفان السطر نفسه مرّتين. */
+  const acking = new Set();
+
+  /**
+   * ما للحساب كما يُعرض: يدمج ما قرأته الشاشة من السحابة بسجلّ الجهاز
+   * ويحفظه — ثم، بعد الحفظ وحده، يحذف من السحابة ما وصل قراره منه، بما حُفظ
+   * منه: ack(id, { status, updated_at }). فإن تغيّر القرار في السحابة بعد قراءته
+   * لم يُحذف، ويُحفظ الأحدث في التحديث التالي ثم يُحذف.
+   *
+   * وnow متى بدأت قراءة cloud: قراءةٌ بدأت قبل ما حفظته صفحةٌ أخرى على الهاتف
+   * لا تغلبه (merge).
+   *
+   * يُرجع { view, done, kept }: view ما يُعرض الآن دون انتظار الحذف، وdone وعدٌ
+   * بما حُذف، وkept هل حُفظ السجلّ (وإلا فالقرارات لا تبقى على هذا الجهاز ولا
+   * يُحذف من السحابة شيء). والحذف واحداً واحداً: ما تعذّر منه (الشبكة، أو سكربت
+   * سحابةٍ لم يُحدَّث بعد) يُترك للتحديث التالي، والسطر محفوظٌ هنا في الحالين.
+   *
+   * والقراءة والدمج والحفظ في خطوةٍ واحدة بلا انتظار بينها: ما أُرسل من
+   * صفحةٍ أخرى أثناء قراءة السحابة لا يمحوه حفظٌ قرأ السجلّ قبله.
+   */
+  function settle(uid, cloud, ack, now = Date.now(), device = deviceId()) {
+    const { list, ack: due, view } = merge(read(uid), cloud, now, device);
+    const saved = write(uid, list);
+    const kept = new Map((saved ?? []).map((e) => [String(e.id), e]));
+    const ids = due.filter((id) => kept.has(String(id)) && !acking.has(String(id)));
+    const done = (async () => {
+      const acked = [];
+      for (const id of ids) acking.add(String(id));
+      try {
+        for (const id of ids) {
+          const e = kept.get(String(id));
+          if (await ack(id, { status: e.status, updated_at: e.updated_at ?? null })) acked.push(String(id));
+        }
+      } catch { /* الباقي في التحديث التالي */ }
+      finally {
+        for (const id of ids) acking.delete(String(id));
+      }
+      if (acked.length) {
+        /* قراءةٌ جديدة: ما حُفظ أثناء الحذف يبقى. */
+        const fresh = read(uid) ?? [];
+        write(uid, fresh.map((e) => (acked.includes(String(e.id)) ? { ...e, local_status: 'acked' } : e)));
+      }
+      return acked;
+    })();
+    return { view, done, kept: saved !== null };
+  }
+
+  return { key, toEntry, prune, merge, read, write, local, remember, withdrawn, settle };
 }
+
+const requestLog = deviceLog({
+  prefix: 'gc-portal-requests',
+  fields: ENTRY,
+  shape: (row, out) => { out.lines = Array.isArray(row?.lines) ? row.lines : []; },
+  stages: STAGE,
+  final: FINAL_STATUSES,
+  live: LIVE_STATUSES,
+});
+
+export const historyKey = requestLog.key;
+
+/** سطر السحابة — أو الطلب المرسَل — بما يحفظه الجهاز منه. */
+export const toEntry = requestLog.toEntry;
+
+/** آخر 300 طلب في سنة، بآخر ما جرى عليها (deviceLog). */
+export const pruneHistory = requestLog.prune;
+
+/** يدمج طلبات الحساب في السحابة بسجلّ الجهاز (deviceLog: merge). */
+export const mergeHistory = (stored, cloud, now = Date.now(), device = deviceId()) => requestLog.merge(stored, cloud, now, device);
 
 /** سجلّ الحساب على هذا الجهاز — أو null إن لم يكن له سجلّ بعد، أو تعذّرت قراءته. */
-export function readHistory(uid) {
-  if (!uid) return null;
-  try {
-    const raw = localStorage.getItem(historyKey(uid));
-    if (raw === null || raw === undefined) return null;
-    const list = JSON.parse(raw);
-    return Array.isArray(list) ? list : null;
-  } catch {
-    return null;
-  }
-}
+export const readHistory = requestLog.read;
 
-/**
- * يحفظ السجلّ ويُرجع ما حُفظ فعلاً — أو null إن لم يُحفظ شيء، ويبقى
- * المحفوظ قبله كما كان. فإن امتلأ التخزين حُفظ أحدثه: نصفه ثم ربعه…
- * حتى عشرين — فالقرار الذي وصل الآن يُحفظ ولو سقط ما قبل أشهر.
- */
-export function writeHistory(uid, list) {
-  if (!uid) return null;
-  for (let n = list.length; ; n = Math.floor(n / 2)) {
-    const part = list.slice(0, n);
-    try {
-      localStorage.setItem(historyKey(uid), JSON.stringify(part));
-      return part;
-    } catch {
-      if (n <= 20) return null;
-    }
-  }
-}
+/** يحفظ السجلّ ويُرجع ما حُفظ فعلاً — أو null (deviceLog: write). */
+export const writeHistory = requestLog.write;
 
 /** طلبات الحساب على هذا الجهاز وحده — حين تتعذّر السحابة. */
-export const localHistory = (uid) => (readHistory(uid) ?? []).map((e) => toEntry(e)).sort(byCreated);
+export const localHistory = requestLog.local;
+
+/** يحفظ في سجلّ الجهاز طلباً أُرسل منه — بانتظار الحاسوب الرئيسي. */
+export const rememberRequest = (uid, request, now = Date.now()) => requestLog.remember(uid, request, now);
 
 /**
- * يحفظ في سجلّ الجهاز طلباً أُرسل منه — بانتظار الحاسوب الرئيسي. وطلبٌ
- * فيه من قبل (إعادة إرسالٍ بعد انقطاع) يبقى كما حُفظ: ما في السحابة هو
- * الإرسال الأول، وهو يغلب حين يُقرأ.
+ * طلبات الحساب كما تُعرض: تُدمج وتُحفظ، ثم يُحذف من السحابة ما وصل قراره
+ * (deviceLog: settle). يُرجع { view, done, kept }.
  */
-export function rememberRequest(uid, request, now = Date.now()) {
-  if (!uid || !request?.id) return false;
-  const list = readHistory(uid) ?? [];
-  if (list.some((e) => String(e.id) === String(request.id))) return true;
-  const entry = toEntry({ ...request, status: 'pending', created_at: new Date(now).toISOString() }, 'sent');
-  return Boolean(writeHistory(uid, pruneHistory([entry, ...list], now)));
-}
+export const settleRequests = (uid, cloud, ack = ackRequest, now = Date.now(), device = deviceId()) =>
+  requestLog.settle(uid, cloud, ack, now, device);
 
-/* ما يُحذف الآن من السحابة — فتحديثان متقاربان لا يحذفان السطر نفسه مرّتين. */
-const acking = new Set();
+/* ================ عمليات الأمانات والعمال على هذا الجهاز ================
+   من أُعطي «الأمانات» أو «العمال والحضور» يعمل عليها من هاتفه: تسليمٌ وإعادة
+   وتمديد وتعديل وحذف، وعاملٌ يُضاف أو يُعدَّل، وحضورٌ يُدوَّن. وكل فعلٍ عمليةٌ
+   في gc_ops يطبّقها الحاسوب الرئيسي بقواعد شاشاته: «المعتمد» فور وصولها،
+   و«الطالب» بعد موافقة المدير.
+
+   والعملية تمرّ بالسحابة كما يمرّ الطلب: تحمل معرّف هذا الجهاز، وتُحفظ في
+   سجلّه (gc-portal-ops:<معرّف الحساب>) حين تُرسل، ويعود قرارها إليه وحده —
+   طُبّقت ونتيجتها (رقم الأمانة، رمز العامل)، أو رُدّت وسببها — فيُحفظ ثم
+   تُحذف من السحابة (gc_ack_op). وتُسحب ما دامت لم تصل الحاسوب (gc_withdraw_op).
+
+   والسجلّ أوسع من سجلّ الطلبات: الحضور عمليةٌ لكل عاملٍ كل يوم. */
+
+export const OPS_MAX = 600;
+/** قرارٌ تمّ: طُبّقت، أو رُدّت، أو أُلغيت بعد تطبيقها. */
+export const OP_FINAL = ['applied', 'rejected', 'cancelled'];
+export const OP_LIVE = ['pending', 'received'];
+const OP_STAGE = { pending: 0, received: 1, applied: 2, rejected: 2, cancelled: 3, withdrawn: 3 };
+
+/* ما يحفظه الجهاز من العملية: نوعها وبياناتها كما أُرسلت، وقرارها ونتيجته. */
+const OP_ENTRY = {
+  id: null, kind: '', payload: null, direct: false, created_at: null, status: 'pending', decision_note: '',
+  result: null, decided_by: '', decided_at: null, updated_at: null, read_at: null,
+};
+
+const isObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+
+const opLog = deviceLog({
+  prefix: 'gc-portal-ops',
+  fields: OP_ENTRY,
+  shape: (row, out) => {
+    out.payload = isObject(row?.payload) ? row.payload : {};
+    out.result = isObject(row?.result) ? row.result : null;
+  },
+  stages: OP_STAGE,
+  final: OP_FINAL,
+  live: OP_LIVE,
+  max: OPS_MAX,
+});
+
+export const opsKey = opLog.key;
+export const toOpEntry = opLog.toEntry;
+export const mergeOps = (stored, cloud, now = Date.now(), device = deviceId()) => opLog.merge(stored, cloud, now, device);
+export const readOps = opLog.read;
+export const writeOps = opLog.write;
+/** عمليات الحساب على هذا الجهاز وحده — حين تتعذّر السحابة. */
+export const localOps = opLog.local;
+export const rememberOp = (uid, op, now = Date.now()) => opLog.remember(uid, op, now);
 
 /**
- * طلبات الحساب كما تُعرض: يدمج ما قرأته الشاشة من السحابة بسجلّ الجهاز
- * ويحفظه — ثم، بعد الحفظ وحده، يحذف من السحابة ما وصل قراره منها، بما حُفظ
- * منه: ack(id, { status, updated_at }). فإن تغيّر القرار في السحابة بعد قراءته
- * لم يُحذف، ويُحفظ الأحدث في التحديث التالي ثم يُحذف.
- *
- * وnow متى بدأت قراءة cloud: قراءةٌ بدأت قبل ما حفظته صفحةٌ أخرى على الهاتف
- * لا تغلبه (mergeHistory).
- *
- * يُرجع { view, done, kept }: view ما يُعرض الآن دون انتظار الحذف، وdone وعدٌ
- * بما حُذف، وkept هل حُفظ السجلّ (وإلا فالقرارات لا تبقى على هذا الجهاز ولا
- * يُحذف من السحابة شيء). والحذف واحداً واحداً: ما تعذّر منه (الشبكة، أو سكربت
- * سحابةٍ لم يُحدَّث بعد) يُترك للتحديث التالي، والطلب محفوظٌ هنا في الحالين.
- *
- * والقراءة والدمج والحفظ في خطوةٍ واحدة بلا انتظار بينها: طلبٌ أُرسل من
- * صفحةٍ أخرى أثناء قراءة السحابة لا يمحوه حفظٌ قرأ السجلّ قبله.
+ * يُرسل عمليةً: { id, kind, payload }. المعرّف من المتصفّح كالطلب: إعادة
+ * الإرسال بعد انقطاع لا تُكرّرها — ويُرجع false إن كانت قد وصلت من قبل.
+ * والسحابة تكتب صاحبها ومباشرتها وحالتها (gc_ops_guard)، وترفض ما لا يملكه
+ * الحساب برسالةٍ عربية. وdirect كما كان الحساب يوم أُرسلت.
  */
-export function settleRequests(uid, cloud, ack = ackRequest, now = Date.now(), device = deviceId()) {
-  const { list, ack: due, view } = mergeHistory(readHistory(uid), cloud, now, device);
-  const saved = writeHistory(uid, list);
-  const kept = new Map((saved ?? []).map((e) => [String(e.id), e]));
-  const ids = due.filter((id) => kept.has(String(id)) && !acking.has(String(id)));
-  const done = (async () => {
-    const acked = [];
-    for (const id of ids) acking.add(String(id));
-    try {
-      for (const id of ids) {
-        const e = kept.get(String(id));
-        if (await ack(id, { status: e.status, updated_at: e.updated_at ?? null })) acked.push(String(id));
-      }
-    } catch { /* الباقي في التحديث التالي */ }
-    finally {
-      for (const id of ids) acking.delete(String(id));
-    }
-    if (acked.length) {
-      /* قراءةٌ جديدة: ما حُفظ أثناء الحذف يبقى. */
-      const fresh = readHistory(uid) ?? [];
-      writeHistory(uid, fresh.map((e) => (acked.includes(String(e.id)) ? { ...e, local_status: 'acked' } : e)));
-    }
-    return acked;
-  })();
-  return { view, done, kept: saved !== null };
+export async function insertOp(op, { direct = false } = {}) {
+  const body = { id: op.id, kind: op.kind, payload: op.payload, device: deviceId() };
+  let fresh = true;
+  try {
+    await call('/rest/v1/gc_ops', { method: 'POST', body, headers: { Prefer: 'return=minimal' } });
+  } catch (err) {
+    if (err.status !== 409) throw err;
+    fresh = false;
+  }
+  rememberOp(currentUserId(), { id: op.id, kind: op.kind, payload: op.payload, direct: Boolean(direct) });
+  return fresh;
 }
+
+/** «تسلّمت» العملية: بمعنى ackRequest حرفاً بحرف — بما حُفظ منها وحده. */
+export async function ackOp(id, seen = {}) {
+  if (!seen?.status || !seen?.updated_at) return false;
+  return (await rpc('gc_ack_op', {
+    op_id: id, seen_status: seen.status, seen_updated_at: seen.updated_at,
+  })) === true;
+}
+
+/** يسحب عمليةً لم تصل الحاسوب الرئيسي بعد — وتبقى في سجلّ الجهاز «مسحوبة». */
+export async function withdrawOp(id, row = null) {
+  const done = (await rpc('gc_withdraw_op', { op_id: id })) === true;
+  if (done) opLog.withdrawn(currentUserId(), id, row);
+  return done;
+}
+
+/** عمليات الحساب كما تُعرض: تُدمج بسجلّ الجهاز وتُحفظ، ثم يُحذف ما وصل قراره. */
+export const settleOps = (uid, cloud, ack = ackOp, now = Date.now(), device = deviceId()) =>
+  opLog.settle(uid, cloud, ack, now, device);
