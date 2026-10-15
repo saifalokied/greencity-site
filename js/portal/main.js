@@ -19,16 +19,19 @@
    هاتفه وعلى الحاسوب الرئيسي.
 
    والحسابات نوعان يحدّدهما المدير: «معتمد» يُسجَّل ما يكتبه سنداً بلا
-   موافقة ويرى المخطط، و«طالب» يرى المواد وأرصدتها وطلباته وحالاتها،
-   وطلبه ينتظر المدير. والمنع الحقّ في سياسات السحابة: ما لا يُعرض للطالب
-   هنا لا تُرجعه له القاعدة أصلاً.
+   موافقة ويرى المواد بأرصدتها والمخطط، و«طالب» يطلب المواد من «قائمة
+   الطلبات» (menu.js) كما يُطلب الطعام — المواد بأقسامها، بلا أرصدة ولا
+   أعداد — ويرى طلباته وحالاتها، وطلبه ينتظر المدير. والمنع الحقّ في سياسات
+   السحابة: ما لا يُعرض للطالب هنا لا تُرجعه له القاعدة أصلاً — إلا الأرصدة:
+   تصله ولا تُعرض له، فإخفاؤها قرار صاحب المشروع على الشاشة وحدها.
    ========================================================================== */
 
 import { initLang, getLang, setLang, LANGS, tx } from '../i18n.js';
-import { h, clear, icon, toast, modal, ago, fmtDateTime } from '../ui.js';
+import { h, clear, icon, toast, modal, ago, fmtDateTime, num } from '../ui.js';
 import { OPS, opIcon } from '../ops.js';
-import { configured, hasSession, signIn, signOut, rows, all, currentUserId } from './sb.js';
+import { configured, hasSession, signIn, signOut, rows, all, currentUserId, readCart } from './sb.js';
 import { SITE_VERSION } from './config.js';
+import { guideLink } from './guide-pdf.js';
 
 await initLang();
 
@@ -58,11 +61,14 @@ export const isTrusted = () => state.me?.trusted !== false;
 export const hasPerm = (perm) => Boolean(state.me?.[perm]);
 export const canCustody = () => hasPerm('can_custody');
 export const canWorkers = () => hasPerm('can_workers');
+/** «مدير» (الإصدار الخامس): يرى نسخة البرنامج كلّها من «الإدارة» (admin.js)، ومعه كل الصلاحيات —
+    يكتبها الحاسوب الرئيسي معه في gc_staff. وسكربتٌ أقدم بلا العمود: حسابٌ «معتمد» كما كان. */
+export const isAdmin = () => hasPerm('admin');
 
 /** المواد والمخازن والأرصدة والمخطط — تُحمَّل مرّة وتُجدَّد كل دقيقة عند الحاجة. */
 export async function loadData(force = false) {
   if (!force && state.data && Date.now() - state.loadedAt < 60 * 1000) return state.data;
-  const [warehouses, units, items, stock, blocks, houses, categories] = await Promise.all([
+  const [warehouses, units, items, stock, blocks, houses, categories, kits, kitLines] = await Promise.all([
     all('gc_warehouses?select=id,code,name,active&order=id'),
     all('gc_units?select=id,name&order=name'),
     all('gc_items?select=id,sku,name,category_id,unit_id,min_qty,active&order=name'),
@@ -74,6 +80,10 @@ export async function loadData(force = false) {
        ولونها وأيقونتها، وطلبُ عمودٍ غائب يُسقط الطلب كلّه. وإن لم تُقرأ
        أصلاً بقيت المواد كلّها «بلا قسم» ولم يتعطّل شيء. */
     all('gc_categories?select=*&order=id').catch(() => []),
+    /* الأطقم الجاهزة (الإصدار الخامس): سحابةٌ لم يُعَد فيها السكربت لا جدول لها —
+       فلا أطقم، ويبقى كل شيء كما كان. */
+    all('gc_kits?select=*&order=sort,id').catch(() => []),
+    all('gc_kit_lines?select=*&order=kit_id,sort,id').catch(() => []),
   ]);
   const unitName = new Map(units.map((u) => [u.id, u.name]));
   const byItem = new Map();
@@ -82,6 +92,8 @@ export async function loadData(force = false) {
     byItem.get(s.item_id)[s.warehouse_id] = Number(s.qty) || 0;
   }
   const blockById = new Map(blocks.map((b) => [b.id, b]));
+  const itemById = new Map(items.map((i) => [i.id, i]));
+  const activeItem = (id) => itemById.get(id)?.active !== 0 && itemById.has(id);
   state.data = {
     warehouses: warehouses.filter((w) => w.active !== 0),
     allWarehouses: warehouses,
@@ -97,6 +109,18 @@ export async function loadData(force = false) {
     categories: categories
       .map((c) => ({ id: c.id, name: c.name ?? '', sort: Number(c.sort) || 0, color: c.color || '', icon: c.icon || 'box' }))
       .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, 'ar')),
+    /* الطقم بموادّه وكمية كلٍّ لطقمٍ واحد. وطقمٌ فيه مادةٌ لا تُعرف أو موقوفة لا يُعرض:
+       الحاسوب لا يعتمده حتى يُصلَح. */
+    kits: kits.filter((k) => k.active !== 0)
+      .map((k) => ({
+        id: k.id, name: k.name ?? '', icon: k.icon || 'kit', color: k.color || '', notes: k.notes || '',
+        lines: kitLines.filter((l) => l.kit_id === k.id).map((l) => ({
+          item_id: l.item_id, qty: Number(l.qty),
+          name: itemById.get(l.item_id)?.name ?? '', unit: unitName.get(itemById.get(l.item_id)?.unit_id) ?? '',
+          sku: itemById.get(l.item_id)?.sku ?? '',
+        })),
+      }))
+      .filter((k) => k.lines.length && k.lines.every((l) => activeItem(l.item_id))),
   };
   state.loadedAt = Date.now();
   return state.data;
@@ -125,32 +149,46 @@ export const sectionColor = (sec) => sec?.color || 'var(--text-3)';
 
 /* ============================== التوجيه ============================== */
 
-/* trusted: شاشة المعتمد وحده. و«المواد» للنوعين: المواد وأرصدتها ليُطلب
-   منها — لا دفتر مخزنٍ في السحابة.
-   والقسم (‎#/section/3‎، و0 لـ«بلا قسم») يُفتح من أيقونته في الرئيسية —
-   للنوعين: موادّه بأرصدتها، ومنه يُطلب إدخالها أو إخراجها. وليس له زرّ في
-   الشريط: nav يُبقي «الرئيسية» مضاءةً وهو مفتوح.
+/* trusted: شاشة المعتمد وحده — و«المواد» والقسم له: المواد وأرصدتها ليُطلب
+   منها، لا دفتر مخزنٍ في السحابة.
+   والقسم (‎#/section/3‎، و0 لـ«بلا قسم») يُفتح من أيقونته في الرئيسية:
+   موادّه بأرصدتها، ومنه يُطلب إدخالها أو إخراجها. وليس له زرّ في الشريط:
+   nav يُبقي «الرئيسية» مضاءةً وهو مفتوح.
+   وasker: شاشة الطالب وحده — «اطلب» (‎#/menu‎): المواد بأقسامها قائمةَ
+   طلباتٍ بلا أرصدة، تُضاف إلى السلّة (‎#/cart‎) ثم تُرسل طلباً واحداً.
+   ورابط المواد أو القسم يفتح له القائمة (currentRoute).
    والسندات (‎#/vouchers‎) لم تعد هنا: بقيت على الحاسوب الرئيسي، ورابطها
    المحفوظ يفتح الرئيسية.
    وperm: شاشةٌ لمن أُعطي صلاحيتها — الأمانات (‎#/custody‎) والعمال والحضور
    (‎#/workers‎ و‎#/workers/attendance‎). ومن لم يُعطَها يُفتح له رابطها الرئيسية. */
 const ROUTES = {
   home: { title: 'الرئيسية', icon: 'home', view: 'home' },
-  section: { title: 'القسم', icon: 'grid', view: 'section', nav: 'home' },
-  stock: { title: 'المواد', icon: 'layers', view: 'stock' },
+  section: { title: 'القسم', icon: 'grid', view: 'section', nav: 'home', trusted: true },
+  stock: { title: 'المواد', icon: 'layers', view: 'stock', trusted: true },
+  menu: { title: 'اطلب', icon: 'cart', view: 'menu', asker: true },
+  cart: { title: 'السلة', icon: 'cart', view: 'cart', nav: 'menu', asker: true },
   plan: { title: 'المخطط', icon: 'map', view: 'plan', trusted: true },
   custody: { title: 'الأمانات', icon: 'opCustody', view: 'custody', perm: 'can_custody' },
   workers: { title: 'العمال', icon: 'hardhat', view: 'workers', perm: 'can_workers' },
+  /* «الإدارة» للمدير وحده: لوحته وشاشاته (‎#/admin‎ و‎#/admin/vouchers‎…) — قراءةٌ من نسخة المدير. */
+  admin: { title: 'الإدارة', icon: 'grid', view: 'admin', perm: 'admin' },
   new: { title: 'طلب جديد', view: 'request' },
 };
 
 /** هل يفتح هذا الحساب الشاشة؟ */
-const allowed = (name) => (!ROUTES[name]?.trusted || isTrusted()) && (!ROUTES[name]?.perm || hasPerm(ROUTES[name].perm));
+const allowed = (name) => (!ROUTES[name]?.trusted || isTrusted()) && (!ROUTES[name]?.asker || !isTrusted()) && (!ROUTES[name]?.perm || hasPerm(ROUTES[name].perm));
 
 export function currentRoute() {
   const raw = location.hash.replace(/^#\/?/, '');
   const [path, query = ''] = raw.split('?');
   const [name, ...rest] = path.split('/');
+  if (!isTrusted() && (name === 'stock' || name === 'section')) {
+    /* الطالب يطلب من قائمة الطلبات لا من المواد بأرصدتها: رابطهما — محفوظاً،
+       أو أرسله له معتمد — يفتح القائمة، والقسمُ مفتوحاً عليها. */
+    const at = name === 'section' ? rest.join('/') : '';
+    history.replaceState(null, '', at ? `#/menu?section=${encodeURIComponent(at)}` : '#/menu');
+    return { name: 'menu', param: '', query: at ? { section: at } : {} };
+  }
   if (name && (!Object.hasOwn(ROUTES, name) || !allowed(name))) {
     /* طالبٌ كتب ‎#/plan‎ بيده — أو فتح رابطاً أرسله له معتمد، أو رابط الأمانات
        وليست له — أو رابطٌ محفوظ لشاشةٍ لم تعد في الموقع (‎#/vouchers‎): يرى
@@ -201,7 +239,9 @@ export async function render() {
     const mod = def.view === 'request' ? await import('./request.js')
       : def.view === 'custody' ? await import('./custody.js')
         : def.view === 'workers' ? await import('./workers.js')
-          : await import('./views.js');
+          : def.view === 'admin' ? await import('./admin.js')
+          : def.view === 'menu' || def.view === 'cart' ? await import('./menu.js')
+            : await import('./views.js');
     if (stale()) return;
     const result = await mod[def.view]({ content: clear(content), route });
     if (stale()) {
@@ -222,28 +262,58 @@ window.addEventListener('hashchange', render);
 
 function paintNav(active) {
   const any = canRequest('in') || canRequest('out');
+  /* الطالب يطلب من قائمة الطلبات: زرّ الطلب يفتحها، والنوع يُختار في السلّة.
+     والمعتمد يختار نوع الطلب ثم يكتبه في النموذج. */
+  const newRequest = isTrusted() ? chooseRequest : () => go('#/menu');
+  /* «اطلب» بعدد موادّ السلّة — وحساب الاطّلاع لا يطلب: «المواد» بلا سلّة. */
+  const label = (name) => (name === 'menu' && !any ? 'المواد' : ROUTES[name].title);
+  const glyph = (name) => (name === 'menu' && !any ? 'layers' : ROUTES[name].icon);
+  const badge = (name) => (name === 'menu' && any ? cartBadge() : null);
+  const NAV = ['home', 'admin', 'stock', 'menu', 'plan', 'custody', 'workers'];
   const nav = clear(document.getElementById('p-nav'));
-  for (const name of ['home', 'stock', 'plan', 'custody', 'workers'].filter(allowed)) {
+  for (const name of NAV.filter(allowed)) {
     nav.append(h('a', { href: `#/${name}`, class: active === name ? 'active' : null },
-      icon(ROUTES[name].icon, 17), ROUTES[name].title));
+      icon(glyph(name), 17), label(name), badge(name)));
   }
   /* على الحاسوب لا شريط سفلي: زرّ الطلب في الشريط العلوي بلون زرّ الهاتف. */
-  if (any) nav.append(h('button', { class: 'p-new', type: 'button', onclick: chooseRequest }, icon('plus', 17), 'طلب جديد'));
-  const tab = (name) => h('a', { href: `#/${name}`, class: active === name ? 'active' : null }, icon(ROUTES[name].icon, 21), ROUTES[name].title);
-  const fab = any ? h('button', { class: 'fab', title: 'طلب جديد', onclick: chooseRequest }, icon('plus', 26)) : null;
+  if (any) nav.append(h('button', { class: 'p-new', type: 'button', onclick: newRequest }, icon('plus', 17), 'طلب جديد'));
+  const tab = (name) => h('a', { href: `#/${name}`, class: active === name ? 'active' : null }, icon(glyph(name), 21), label(name), badge(name));
+  const fab = any ? h('button', { class: 'fab', title: 'طلب جديد', onclick: newRequest }, icon('plus', 26)) : null;
   const bar = clear(document.getElementById('tabbar'));
   /* المعتمد: الرئيسية والمواد، وزرّ الطلب، والمخطط. والطالب: طلباته،
-     وزرّ الطلب في الوسط تحت إبهامه، والمواد. وحساب الاطّلاع بلا زرّ طلب.
+     وزرّ الطلب في الوسط تحت إبهامه، و«اطلب». وحساب الاطّلاع بلا زرّ طلب.
      ومن له الأمانات أو العمال: أزرارهما بعد زرّ الطلب. والشريط خمسة أزرار
      على الأكثر — تحت الإبهام على شاشة 360 بكسلاً: فإن زاد خرج منه المخطط،
      ويُفتح من «المخطط» في الرئيسية. */
-  const names = ['home', 'stock', 'plan', 'custody', 'workers'].filter(allowed);
+  const names = NAV.filter(allowed);
+  /* المدير: «الإدارة» في الشريط، والأمانات والعمال في الشريط العلوي وفي «الإدارة». */
+  if (hasPerm('admin')) for (const k of ['workers', 'custody']) if (names.length + (fab ? 1 : 0) > 5 && names.includes(k)) names.splice(names.indexOf(k), 1);
   if (names.length + (fab ? 1 : 0) > 5) names.splice(names.indexOf('plan'), 1);
   const tabs = names.map(tab);
   /* زرّ الطلب في الوسط: بعد نصف الأزرار — وفي العدد الفرديّ بعد أكثرها. */
   if (fab) tabs.splice(Math.ceil(names.length / 2), 0, fab);
   bar.append(...tabs);
   bar.style.gridTemplateColumns = `repeat(${bar.children.length}, 1fr)`;
+}
+
+/* ------------------------------ السلّة ------------------------------
+   عدد موادّ سلّة الطالب على زرّ «اطلب» في الشريطين: يُرى من أي شاشة أن في
+   السلّة ما لم يُرسل. والسلّة على هذا الجهاز (sb.js)، وmenu.js يُعيد رسم
+   العدد كلما غيّرها. */
+
+const cartCount = () => readCart(currentUserId())?.lines.length ?? 0;
+
+function cartBadge() {
+  const n = cartCount();
+  return h('span', { class: 'p-cart-n', 'data-cart-badge': '', hidden: !n }, n ? num(n) : '');
+}
+
+export function paintCartBadge() {
+  const n = cartCount();
+  for (const el of document.querySelectorAll('[data-cart-badge]')) {
+    el.textContent = n ? num(n) : '';
+    el.hidden = !n;
+  }
 }
 
 /** نوعا الطلب بلونيهما، لمن يملك أحدهما أو كليهما. */
@@ -482,7 +552,7 @@ async function start() {
 /* صلاحيات الحساب تُقرأ ثانيةً مع حالة الحاسوب: ما يعطيه المدير من الحاسوب —
    الأمانات أو العمال أو «معتمد» — يظهر في الشريط خلال نصف دقيقة، وما يسحبه
    يغيب، بلا خروجٍ ولا تحديث صفحة. والحساب الموقوف يعود إلى شاشة الدخول. */
-const PERM_KEYS = ['trusted', 'can_in', 'can_out', 'direct_in', 'direct_out', 'can_custody', 'can_workers'];
+const PERM_KEYS = ['trusted', 'can_in', 'can_out', 'direct_in', 'direct_out', 'can_custody', 'can_workers', 'admin'];
 
 async function refreshMe() {
   if (!state.me) return;
@@ -546,12 +616,19 @@ window.addEventListener('gc-session-lost', (e) => {
 /** نوع الحساب بأيقونته ولونه، وما يعنيه لصاحبه بكلامٍ موجّه إليه. */
 function accountKind() {
   const trusted = isTrusted();
+  /* «مدير»: نوعٌ ثالث بلونٍ ذهبي — يرى البرنامج كلّه. */
+  if (isAdmin()) {
+    return h('div', { class: 'p-kind admin' },
+      h('span', { class: 'kind-icon' }, icon('key', 18)),
+      h('div', {}, h('b', {}, 'مدير'),
+        h('div', { class: 'small' }, 'ترى من «الإدارة» بيانات البرنامج كلّها، ولك كل الصلاحيات.')));
+  }
   return h('div', { class: `p-kind ${trusted ? 'trusted' : 'asker'}` },
     h('span', { class: 'kind-icon' }, icon(trusted ? 'checkCircle' : 'send', 18)),
     h('div', {}, h('b', {}, trusted ? 'معتمد' : 'طالب'),
       h('div', { class: 'small' }, trusted
         ? 'ما تكتبه يُسجَّل سنداً دون موافقة، وترى المواد والمخطط.'
-        : 'طلباتك تنتظر موافقة المدير، وترى المواد وأرصدتها.')));
+        : 'طلباتك تنتظر موافقة المدير، وتطلب المواد من قائمتها بأقسامها.')));
 }
 
 function accountMenu() {
@@ -569,12 +646,15 @@ function accountMenu() {
           h('div', { class: 'muted ltr', translate: 'no', style: 'text-align:right' }, me.username))),
       h('div', {}, h('div', { class: 'small muted', style: 'margin-bottom:6px' }, 'نوع الحساب'), accountKind()),
       h('div', {}, h('div', { class: 'small muted', style: 'margin-bottom:6px' }, 'صلاحياتك على الموقع'),
-        h('div', { class: 'chips' }, h('span', { class: 'chip' }, icon('eye', 14), 'المواد وأرصدتها'),
+        h('div', { class: 'chips' }, h('span', { class: 'chip' }, icon('eye', 14), isTrusted() ? 'المواد وأرصدتها' : 'المواد بأقسامها'),
           isTrusted() ? h('span', { class: 'chip' }, icon('map', 14), 'المخطط') : null,
           ...perms.map((p) => h('span', { class: 'chip' }, icon('check', 14), p)),
           /* الأمانات والعمال: «مباشرة» للمعتمد، و«بموافقة المدير» للطالب — كما تصل عملياته. */
           canCustody() ? h('span', { class: 'chip' }, icon('opCustody', 14), isTrusted() ? 'الأمانات مباشرة' : 'الأمانات بموافقة المدير') : null,
-          canWorkers() ? h('span', { class: 'chip' }, icon('hardhat', 14), isTrusted() ? 'العمال مباشرة' : 'العمال بموافقة المدير') : null)),
+          canWorkers() ? h('span', { class: 'chip' }, icon('hardhat', 14), isTrusted() ? 'العمال مباشرة' : 'العمال بموافقة المدير') : null,
+          isAdmin() ? h('span', { class: 'chip' }, icon('grid', 14), 'الإدارة: بيانات البرنامج كلّها') : null)),
+      /* دليل الطلب (PDF) لكل الحسابات — يُفتح في صفحةٍ جديدة، وتُغلق النافذة (guide-pdf.js). */
+      guideLink({ onclick: close }),
       h('div', { class: 'info-box' }, icon('phone', 18), h('div', {},
         h('b', {}, 'على الهاتف'),
         h('div', { class: 'small' }, 'من قائمة المتصفّح اختر «الإضافة إلى الشاشة الرئيسية» ليفتح الموقع كتطبيق.'))),

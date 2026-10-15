@@ -13,6 +13,15 @@
    ومن أُعطي «الأمانات» أو «العمال والحضور»: زرّاهما في الرئيسية، وتحت
    «طلباتي» عملياته عليهما بحالها وقرارها (people.js) — وشاشتاهما في
    custody.js وworkers.js.
+
+   والأقسام والمواد بأرصدتها للمعتمد. و«الطالب» يطلب من قائمة الطلبات
+   (menu.js) بلا أرصدة ولا أعداد: أيقونات الأقسام في رئيسيته تفتحها على
+   القسم، ورابط المواد أو القسم يفتحها له (main.js).
+
+   ورئيسية الطالب أبسط (الإصدار الخامس): زرٌّ كبير واحد «اطلب مواد» أوّلها،
+   ثم «طلب إدخال» إن كان له، ثم «طلباتي» — وعلى كل طلبٍ مراحله نقاطاً، وفي درجه
+   مراحله كلّها بأوقاتها: أُرسل، وصل، تمت الموافقة، قيد التجهيز، تم التجهيز
+   (track.js).
    ===================================================================== */
 
 import {
@@ -20,12 +29,15 @@ import {
   meter, kpi, fold, debounce, toast, soleHouse,
 } from '../ui.js';
 import { OPS, opIcon } from '../ops.js';
-import { all, withdraw, settleRequests, ackRequest, localHistory, currentUserId, storageKept } from './sb.js';
+import { all, withdraw, settleRequests, ackRequest, localHistory, currentUserId, storageKept, readCart } from './sb.js';
 import {
   state, loadData, canRequest, requestTitle, requestHint, pcOnline, isTrusted, bySection, sectionColor, NO_SECTION, go,
   canCustody, canWorkers,
 } from './main.js';
 import { homeOps, kindIcon } from './people.js';
+import { WH_KEY } from './send.js';
+import { displayStatus, timeline, currentStep, TRACK_LABELS } from './track.js';
+import { guideLink } from './guide-pdf.js';
 
 /* ------------------------------ الطلبات ------------------------------ */
 
@@ -33,6 +45,9 @@ export const REQUEST_STATES = {
   pending: { label: 'بانتظار الحاسوب الرئيسي', icon: 'clock' },
   received: { label: 'بانتظار موافقة المدير', icon: 'history' },
   posted: { label: 'سُجّل سنداً', icon: 'checkCircle' },
+  /* الإصدار الخامس: طلب الإخراج بعد اعتماده — المخزن يجهّز موادّه، ثم جهّزها. */
+  preparing: { label: 'قيد التجهيز', icon: 'box' },
+  prepared: { label: 'تم التجهيز', icon: 'checkCircle' },
   rejected: { label: 'مردود', icon: 'xCircle' },
   withdrawn: { label: 'مسحوب', icon: 'undo' },
   /* سُجّل سنداً ثم ألغى المدير السند: ما طُلب لم يُصرف. */
@@ -43,11 +58,41 @@ export const REQUEST_STATES = {
 
 function requestState(r) {
   /* طلب صاحب الصلاحية المباشرة لا ينتظر موافقة: إن وصل ولم يُسجَّل
-     فلأن شيئاً منعه، وسببه مكتوب تحته. */
-  const status = r.gone ? 'gone' : r.status;
+     فلأن شيئاً منعه، وسببه مكتوب تحته. والسند المسجَّل بمرحلة تجهيزه. */
+  const status = displayStatus(r);
   const s = REQUEST_STATES[status] ?? REQUEST_STATES.pending;
   const label = status === 'pending' && r.direct ? 'يُسجَّل حين يتّصل الحاسوب الرئيسي' : s.label;
   return h('span', { class: `req-state ${status}` }, icon(s.icon, 13), label);
+}
+
+/** المراحل نقاطاً تحت عنوان الطلب: لكل مرحلةٍ نقطة بحالها، ونصّ المرحلة الحالية لقارئ الشاشة. */
+function trackDots(r) {
+  const steps = timeline(r);
+  return h('div', { class: 'p-track-dots', role: 'img', 'aria-label': currentStep(steps).label },
+    ...steps.map((s) => h('span', { class: `dot ${s.state}` })));
+}
+
+const STEP_ICON = { done: 'check', now: 'clock', bad: 'x' };
+
+/**
+ * مراحل الطلب في درجه، من فوق إلى تحت: كلٌّ بعلامتها ووقتها ومن قرّرها، ورقم السند
+ * عند الموافقة. وما كتبه المدير بيده (سبب الردّ أو الإلغاء) كما كتبه (translate=no)،
+ * وما كتبه البرنامج (لِمَ لم يُسجَّل تلقائياً) يُترجم.
+ */
+function trackList(r) {
+  return h('ol', { class: 'p-track' }, ...timeline(r).map((s) => {
+    const free = s.key === 'cancelled' || (s.key === 'approved' && r.status === 'rejected');
+    return h('li', { class: `p-track-step ${s.state}`, 'data-step': s.key },
+      h('span', { class: 'pt-ico' }, STEP_ICON[s.state] ? icon(STEP_ICON[s.state], 14) : null),
+      h('div', { class: 'pt-main' },
+        h('b', {}, s.label),
+        s.voucher ? h('span', { class: `req-voucher${r.status === 'cancelled' ? ' cancelled' : ''}` }, icon('file', 13),
+          h('span', {}, TRACK_LABELS.voucher), ' ', h('b', { class: 'ltr', translate: 'no' }, s.voucher)) : null,
+        s.at || s.by ? h('div', { class: 'pt-meta' }, s.at ? h('span', {}, fmtDateTime(s.at)) : null,
+          s.at && s.by ? ' · ' : null, s.by ? h('span', { translate: 'no' }, s.by) : null) : null,
+        s.note ? h('div', { class: `req-note${s.state === 'bad' ? ' bad' : ''}` },
+          free ? h('span', { translate: 'no' }, s.note) : s.note) : null));
+  }));
 }
 
 const linesOf = (r) => (Array.isArray(r.lines) ? r.lines : []);
@@ -104,7 +149,8 @@ let requestsSettled = 0;   // آخر قراءةٍ دُمجت
 export async function home({ content }) {
   const me = state.me;
   const trusted = isTrusted();
-  const perms = [
+  /* الطالب: نوع حسابه وحده — صلاحياته في الأزرار تحته. */
+  const perms = !trusted ? [] : [
     me.can_in ? (me.direct_in ? 'إدخال مباشر' : 'طلب إدخال') : null,
     me.can_out ? (me.direct_out ? 'إخراج مباشر' : 'طلب إخراج') : null,
     canCustody() ? 'الأمانات' : null,
@@ -118,10 +164,22 @@ export async function home({ content }) {
         ? 'الحاسوب الرئيسي متصل — ما تطلبه يصله خلال ثوانٍ.'
         : 'الحاسوب الرئيسي غير متصل الآن — طلبك يُحفظ ويصله حين يُفتح.')),
     h('div', { class: 'perm' },
-      h('span', { class: `kind ${trusted ? 'trusted' : 'asker'}` }, icon(trusted ? 'checkCircle' : 'send', 13), trusted ? 'معتمد' : 'طالب'),
+      state.me?.admin
+        ? h('span', { class: 'kind admin' }, icon('key', 13), 'مدير')
+        : h('span', { class: `kind ${trusted ? 'trusted' : 'asker'}` }, icon(trusted ? 'checkCircle' : 'send', 13), trusted ? 'معتمد' : 'طالب'),
       ...perms.map((p) => h('span', {}, p)))));
 
+  /* «مدير»: لوحته أوّل الرئيسية — أربعة أرقامٍ تفتح شاشاتها (admin.js، تُحمَّل له وحده). */
+  if (state.me?.admin) {
+    const slot = h('div', {});
+    content.append(slot);
+    import('./admin.js').then((m) => { if (slot.isConnected) slot.replaceWith(m.adminHomeCard()); }).catch(() => {});
+  }
+
   const types = ['in', 'out'].filter(canRequest);
+  /* الطالب يطلب الإخراج من قائمة الطلبات (menu.js)، والإدخال من النموذج —
+     ففيه المادة الجديدة. والمعتمد يكتب الاثنين في النموذج. */
+  const startOf = (type) => (type === 'out' && !trusted ? '#/menu' : `#/new/${type}`);
   /* الأمانات والعمال لمن أُعطيهما: زرّان بجانب الطلب — بلونيهما. */
   const people = [
     canCustody() ? h('a', { href: '#/custody', 'data-op': 'custody' }, opIcon('custody', 22, true),
@@ -129,22 +187,42 @@ export async function home({ content }) {
     canWorkers() ? h('a', { href: '#/workers', 'data-op': 'workers' }, kindIcon('worker_add', 22, true),
       h('div', {}, h('b', {}, 'العمال والحضور'), h('small', {}, 'الملفّات والحضور اليومي'))) : null,
   ].filter(Boolean);
-  if (types.length || people.length) {
-    content.append(h('div', { class: 'quick' },
-      ...types.map((type) => h('a', { href: `#/new/${type}`, 'data-op': type },
+  /* الطالب يطلب المواد من زرٍّ كبير واحد أوّل الصفحة — قائمة الطلبات (menu.js)، فيها
+     الأقسام والمواد. وما بقي له من الأزرار تحته: طلب الإدخال، والأمانات والعمال. */
+  const hero = !trusted && types.includes('out');
+  const tiles = trusted ? types : types.filter((type) => type !== 'out');
+  if (hero) {
+    content.append(h('div', { class: 'p-ask-hero' },
+      h('a', { class: 'p-ask-big', href: '#/menu', 'data-op': 'out' }, icon('cart', 28),
+        h('div', {}, h('b', {}, 'اطلب مواد'), h('small', {}, 'اختر من القائمة ثم أرسل — يوافق المدير وتتابع طلبك هنا'))),
+      /* وتحته دليل الطلب (PDF): خطواته ومعنى كل مرحلة، لمن يطلب أوّل مرة (guide-pdf.js). */
+      guideLink({ style: 'margin-top:10px' })));
+  }
+  if (tiles.length || people.length) {
+    content.append(h('div', { class: trusted ? 'quick' : 'quick p-ask-more' },
+      ...tiles.map((type) => h('a', { href: startOf(type), 'data-op': type },
         opIcon(type, 22, true), h('div', {}, h('b', {}, requestTitle(type)), h('small', {}, requestHint(type))))),
       ...people,
-      h('a', { href: '#/stock', 'data-op': 'opening' }, opIcon('opening', 22, true),
-        h('div', {}, h('b', {}, 'المواد'), h('small', {}, 'بأقسامها وأرصدتها')))));
-  } else {
+      trusted
+        ? h('a', { href: '#/stock', 'data-op': 'opening' }, opIcon('opening', 22, true),
+            h('div', {}, h('b', {}, 'المواد'), h('small', {}, 'بأقسامها وأرصدتها')))
+        : null));
+  } else if (!hero) {
     content.append(h('div', { class: 'info-box', style: 'margin-bottom:16px' }, icon('eye', 18),
       h('div', {}, h('b', {}, 'حسابك للاطّلاع'),
         h('div', { class: 'small' }, trusted
           ? 'ترى المواد وأرصدتها والمخطط. ولطلب الإدخال أو الإخراج اطلب الصلاحية من المدير.'
-          : 'ترى المواد وأرصدتها. ولطلب الإدخال أو الإخراج اطلب الصلاحية من المدير.'))));
+          : 'ترى المواد بأقسامها. ولطلب الإدخال أو الإخراج اطلب الصلاحية من المدير.'))));
+  }
+  /* في السلّة ما لم يُرسل: يُذكَّر به صاحبه قبل أن ينساه. */
+  if (!trusted && readCart(currentUserId())?.lines.length) {
+    content.append(h('a', { class: 'p-ask-cart', href: '#/cart' }, icon('cart', 20),
+      h('span', {}, 'في سلّتك مواد لم تُرسل'), h('b', {}, 'متابعة الطلب'), icon('arrowLeft', 16)));
   }
 
-  /* أيقونات الأقسام فوق الطلبات — تُرسم حين تصل المواد. */
+  /* الأطقم الجاهزة للطالب الذي يطلب الإخراج، بين الزرّ الكبير والأقسام — تُرسم حين
+     تصل المواد. وأيقونات الأقسام فوق الطلبات كذلك. */
+  const kitBox = h('div', {});
   const secBox = h('div', {});
   const list = h('div', {}, loadingState(3));
   /* متصفّحٌ لا يحفظ ما يُكتب فيه (تخزينٌ محجوب أو ممتلئ): القرار يصل ولا يبقى
@@ -168,7 +246,7 @@ export async function home({ content }) {
     keepBox, list);
   /* عمليات الأمانات والعمال تحت الطلبات — لمن له صلاحيتهما، أو عمليات على جهازه. */
   const opsBox = homeOps();
-  content.append(secBox, card, opsBox?.node ?? null);
+  content.append(kitBox, secBox, card, opsBox?.node ?? null);
 
   /* القائمة أربعون أربعون: سجلّ سنةٍ كاملة لا يُرسم دفعةً على الهاتف. */
   const PAGE = 40;
@@ -181,9 +259,11 @@ export async function home({ content }) {
     loading.then((data) => {
       /* تعذّرت المواد (الهاتف بلا شبكة): تبقى الأيقونات كما رُسمت آخر مرة. */
       if (!data || !content.isConnected) return;
-      const tiles = sectionTiles(data);
+      const tiles = sectionTiles(data, trusted);
       clear(secBox);
       if (tiles) secBox.append(tiles);
+      clear(kitBox);
+      if (hero && data.kits?.length) kitBox.append(homeKits(data.kits));
     });
     /* والعمليات مع الطلبات لا بعدها: تعذّرها لا يحبس «طلباتي». */
     opsBox?.refresh().catch(() => {});
@@ -220,7 +300,10 @@ export async function home({ content }) {
     clear(list);
     if (problem) list.append(h('div', { class: 'card-body' }, h('div', { class: 'bad-box' }, icon('alert', 18), problem)));
     if (!mine.length) {
-      if (!problem) list.append(emptyState('لا طلبات بعد', types.length ? 'اضغط «طلب إدخال» أو «طلب إخراج» في الأعلى' : null, null, 'list'));
+      if (!problem) {
+        list.append(emptyState('لا طلبات بعد', hero ? 'اضغط «اطلب مواد» في الأعلى'
+          : types.length ? 'اضغط «طلب إدخال» أو «طلب إخراج» في الأعلى' : null, null, 'list'));
+      }
       return;
     }
     list.append(h('div', { class: 'feed' }, ...mine.slice(0, shown).map((r) => {
@@ -228,11 +311,15 @@ export async function home({ content }) {
       const wh = data?.allWarehouses.find((w) => w.id === r.warehouse_id);
       const house = data?.houses.find((x) => x.id === r.house_id);
       const again = resupplyOf(r);
-      return h('a', { class: `feed-item req-item req-${r.gone ? 'gone' : r.status}`, href: 'javascript:void 0', onclick: () => openRequest(r, refresh) },
+      return h('a', {
+        class: `feed-item req-item req-${r.gone ? 'gone' : r.status} req-stage-${displayStatus(r)}`,
+        href: 'javascript:void 0', onclick: () => openRequest(r, refresh),
+      },
         opIcon(r.type, 18),
         h('div', { class: 'f-main' },
-          h('div', { class: 'f-title' }, h('b', {}, requestTitle(r.type, r.direct)), h('span', { class: 'muted' }, `${lines.length} مادة`),
+          h('div', { class: 'f-title' }, h('b', {}, requestTitle(r.type, r.direct)), ...lineCount(lines),
             voucherChip(r)),
+          trackDots(r),
           h('div', { class: 'f-meta' }, ...dots(fmtDateTime(r.created_at), wh?.name, house ? houseLabel(house.code) : null)),
           again ? h('div', { class: 'req-again' }, icon('history', 13), `تجهيز مكرر: ${again}`) : null,
           decisionNote(r)),
@@ -252,6 +339,44 @@ export async function home({ content }) {
   return { refresh, cleanup: () => clearInterval(timer) };
 }
 
+/**
+ * عدد ما في الطلب تحت عنوانه: «N مادة» للمواد — ولا «0 مادة» لطلبٍ أطقمه وحدها —
+ * ثم شارةٌ لكل طقم «طقم: الاسم × العدد»، أجزاءً تُترجم كلٌّ وحده. وشاشة طلبات
+ * «الإدارة» (admin.js) تكتبه كذلك.
+ */
+export function lineCount(lines) {
+  const items = lines.filter((l) => !l.kit_id).length;
+  return [
+    items ? h('span', { class: 'muted' }, `${items} مادة`) : null,
+    ...lines.filter((l) => l.kit_id).map((l) => h('span', { class: 'req-kit' }, icon('kit', 12),
+      h('span', {}, 'طقم:'), ' ', h('span', { translate: 'no' }, l.name ?? ''), ` × ${num(l.qty)}`)),
+  ];
+}
+
+/** بند الطقم في درج الطلب: اسمه وشارته، و«ما بداخله» كما رآه صاحبه — لطقمٍ واحد.
+    ودرج الطلب في «الإدارة» (admin.js) يرسمه كذلك. */
+export function kitCell(l) {
+  const contents = Array.isArray(l.contents) ? l.contents : [];
+  return h('div', { class: 'req-kit-cell' },
+    h('b', { translate: 'no' }, l.name ?? '—'), ' ', badge('طقم جاهز', 'info'),
+    l.resupply ? h('div', { class: 'req-again' }, icon('history', 12), h('span', {}, 'جُهّز سابقاً')) : null,
+    contents.length
+      ? h('details', { class: 'p-kit-details' }, h('summary', {}, h('span', {}, 'ما بداخله'), ' (', num(contents.length), ')'),
+          h('div', { class: 'small muted' }, 'الكمية لطقمٍ واحد'),
+          h('ul', { class: 'p-kit-list' }, ...contents.map((c) => h('li', {},
+            h('span', { class: 'pkl-name' }, c.name ?? ''), h('b', { class: 'pkl-qty' }, ...amount(c.qty, c.unit))))))
+      : null);
+}
+
+/** شريط الأطقم في رئيسية الطالب: أيقونةٌ لكل طقم تفتح قائمة الطلبات عليه. */
+function homeKits(kits) {
+  return h('div', { class: 'card p-home-kits' },
+    h('div', { class: 'card-head' }, h('h3', {}, icon('kit', 18), 'أطقم جاهزة')),
+    h('div', { class: 'p-kit-tiles' }, ...kits.map((k) => h('a', {
+      class: 'p-kit-tile', href: `#/menu?section=kits&kit=${k.id}`, 'data-kit': k.id, style: `--sc:${k.color || 'var(--op-out)'}`,
+    }, h('span', { class: 'pkt-ico' }, icon(k.icon || 'kit', 22)), h('b', {}, k.name)))));
+}
+
 function openRequest(r, onChanged) {
   const lines = linesOf(r);
   const data = state.data;
@@ -265,7 +390,9 @@ function openRequest(r, onChanged) {
       h('div', {}, h('h3', {}, requestTitle(r.type, r.direct)), h('div', { class: 'sub' }, fmtDateTime(r.created_at)))),
     body: h('div', { class: 'form-grid' },
       h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, requestState(r), voucherChip(r)),
-      decisionNote(r),
+      /* المراحل كلّها بأوقاتها، وفيها سبب الردّ أو الإلغاء. */
+      trackList(r),
+
       r.gone
         ? h('div', { class: 'info-box' }, icon('info', 18), h('div', { class: 'small' },
             'حُذف هذا الطلب من السحابة قبل أن يصل قراره إلى هذا الجهاز: سُحب أو وصل قراره إلى جهازٍ آخر لحسابك، أو مضى على قراره أكثر من ثلاثين يوماً. اسأل المدير عنه.'))
@@ -282,12 +409,13 @@ function openRequest(r, onChanged) {
         fact('في', r.decided_at ? fmtDateTime(r.decided_at) : null)),
       table([
         { title: '#', render: (_, i) => String(i + 1) },
-        { title: 'المادة', render: (l) => h('div', {}, h('b', {}, l.name ?? '—'),
-          l.item_id ? null : h('div', { class: 'small muted' }, ...dots('مادة جديدة', sectionName(l.category_id))),
+        { title: 'المادة', render: (l) => (l.kit_id ? kitCell(l) : h('div', {}, h('b', {}, l.name ?? '—'),
+          /* بند الطقم ليس «مادة جديدة»: لا مادة له ولا قسم. */
+          !l.item_id && !l.kit_id ? h('div', { class: 'small muted' }, ...dots('مادة جديدة', sectionName(l.category_id))) : null,
           /* نُبّه صاحب الطلب حين أرسله أن المنزل جُهّز بها، فأرسل. */
           l.resupply ? h('div', { class: 'req-again' }, icon('history', 12), h('span', {}, 'جُهّز سابقاً'),
-            Number(l.prior_net) > 0 ? [' ', num(l.prior_net), l.unit ? [' ', h('span', {}, l.unit)] : null] : null) : null) },
-        { title: 'الكمية', class: 'num', render: (l) => amount(l.qty, l.unit) },
+            Number(l.prior_net) > 0 ? [' ', num(l.prior_net), l.unit ? [' ', h('span', {}, l.unit)] : null] : null) : null)) },
+        { title: 'الكمية', class: 'num', render: (l) => (l.kit_id ? h('b', { class: 'req-kit-n' }, '× ', num(l.qty)) : amount(l.qty, l.unit)) },
         { title: 'ملاحظة', phone: false, render: (l) => l.notes || '' },
       ], lines),
       r.notes ? h('div', { class: 'req-note', translate: 'no' }, r.notes) : null),
@@ -327,9 +455,6 @@ function openRequest(r, onChanged) {
    كما هو: الرصيد، والوجهة، وتنبيه «التجهيز المكرر». وبعد الإرسال يعود
    الموظف إلى القسم. */
 
-/** المخزن الذي يعمل منه الموظف: يختاره هنا أو في الطلب، فيبقى لكليهما (request.js). */
-const WH_KEY = 'gc-portal-wh';
-
 /** القسم في العنوان: رقمه، و0 لـ«بلا قسم» — كما يفتحه البرنامج. */
 const sectionParam = (g) => (g.key === NO_SECTION ? '0' : String(g.id));
 
@@ -363,14 +488,21 @@ function requestLink(type, g, picks = []) {
  * أيقونات الأقسام في الرئيسية: لكل قسم لونه وأيقونته وعدد موادّه، وما
  * نفد منها وما بلغ حدّه — فيُعرف من النظرة أين النقص. و«بلا قسم» آخرها
  * إن بقيت مادة لم تُوضع في قسم. وسحابةٌ بلا أقسام (السكربت القديم): لا شيء.
+ * والطالب: القسم باسمه وأيقونته وحدهما — بلا عددٍ ولا نفاد — يفتح قائمة
+ * الطلبات عليه (menu.js).
  */
-function sectionTiles(data) {
+function sectionTiles(data, trusted = true) {
   if (!data?.categories.length) return null;
   const groups = bySection(data.items.filter((i) => i.active !== 0), data);
   const flag = (n, label, tone) => (n ? h('span', { class: `ph-flag ${tone}` }, num(n), ' ', h('span', {}, label)) : null);
   return h('div', { class: 'p-home-secs' },
     h('div', { class: 'p-home-secs-head' }, h('h3', {}, icon('grid', 18), 'الأقسام')),
     h('div', { class: 'p-home-tiles' }, ...groups.map((g) => {
+      if (!trusted) {
+        return h('a', { class: 'p-home-tile', href: `#/menu?section=${sectionParam(g)}`, style: `--sc:${sectionColor(g)}` },
+          h('span', { class: 'p-sec-ico' }, icon(g.icon, 26)),
+          h('b', {}, g.name));
+      }
       const c = sectionCounts(g.items, (i) => i.total);
       return h('a', { class: 'p-home-tile', href: `#/section/${sectionParam(g)}`, style: `--sc:${sectionColor(g)}` },
         h('span', { class: 'p-sec-ico' }, icon(g.icon, 26)),
@@ -563,8 +695,8 @@ export async function section({ content, route }) {
 }
 
 /* ============================== المواد ==============================
-   المواد بأقسامها وأرصدتها — للنوعين بالاسم نفسه: لا دفتر مخزنٍ في السحابة
-   يراه المعتمد دون الطالب. */
+   المواد بأقسامها وأرصدتها — للمعتمد: لا دفتر مخزنٍ في السحابة. والطالب
+   يرى المواد في قائمة الطلبات (menu.js) بلا أرصدة. */
 
 /* القسم المختار يبقى بين التنقّلات: من يتابع الكهرباء يعود إليها. */
 let stockSection = '';
@@ -828,12 +960,15 @@ export async function plan({ content }) {
 
 /** المنزل بنسبة إنجازه وحاله — وما يُطلب له يُطلب من «طلب إخراج». */
 function openHouse(x) {
+  const more = h('div', {});
+  /* «مدير»: ومن نسخة المدير ما لا يخرج لغيره — صاحب المنزل وملاحظاته ومن حدّث إنجازه (admin.js). */
+  if (state.me?.admin) import('./admin.js').then((m) => m.adminHouseFacts(x.id)).then((nodes) => more.append(...nodes)).catch(() => {});
   drawer({
     title: `منزل ${x.number} — قطاع ${x.block_code}`,
     sub: h('span', { class: 'ltr', translate: 'no' }, x.code),
     body: h('div', { class: 'house-card' },
       h('div', { style: 'display:flex;justify-content:space-between;align-items:center' },
         h('b', { style: 'font-size:22px' }, `${num(x.progress)}٪`), badge(HOUSE_STATUS[x.status] ?? x.status)),
-      meter((Number(x.progress) || 0) / 100)),
+      meter((Number(x.progress) || 0) / 100), more),
   });
 }

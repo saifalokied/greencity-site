@@ -128,6 +128,10 @@ const ICONS = {
   /* أيقونات الأقسام: الصحيات قطرة، والطرق والمساحة طريق. */
   drop: 'M12 2.69l5.66 5.66a8 8 0 11-11.31 0z',
   road: 'M4 21L9 3M20 21L15 3M12 5v2M12 10v3M12 16v3',
+  /* سلّة الطالب: قائمة الطلبات على الموقع (portal/menu.js). */
+  cart: 'M9 22a1 1 0 100-2 1 1 0 000 2zM20 22a1 1 0 100-2 1 1 0 000 2zM1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6',
+  /* الطقم الجاهز: صندوقٌ بشريطه — مواد مجموعة تُطلب معاً. */
+  kit: 'M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z',
   phone: 'M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.08 4.18 2 2 0 014.06 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0122 16.92z',
 };
 
@@ -332,7 +336,7 @@ export function confirmDialog({ title = 'تأكيد', message, confirmText = 'ت
 }
 
 /** يسأل عن نصّ قصير — سبب الإلغاء مثلاً. يُرجع النصّ أو null. */
-export function promptDialog({ title, message, label, placeholder = '', confirmText = 'تأكيد', danger = false, min = 0 }) {
+export function promptDialog({ title, message, warn = null, label, placeholder = '', confirmText = 'تأكيد', danger = false, min = 0 }) {
   return new Promise((resolve) => {
     let answered = false;
     const input = h('textarea', { placeholder, style: 'min-height:70px' });
@@ -341,7 +345,10 @@ export function promptDialog({ title, message, label, placeholder = '', confirmT
       title,
       body: h('div', { class: 'form-grid' },
         message ? h('p', { style: 'margin:0;line-height:1.9' }, message) : null,
+        /* تنبيهٌ يُقرأ قبل التأكيد — إلغاء سندٍ جُهّزت موادّه مثلاً. */
+        warn ? h('div', { class: 'warn-box' }, icon('alert', 18), h('div', {}, warn)) : null,
         field(label, input), err),
+
       footer: (close) => [
         h('button', { class: 'btn', onclick: () => { answered = true; close(); resolve(null); } }, 'رجوع'),
         h('button', {
@@ -488,19 +495,24 @@ export function meter(ratio, color) {
 
 /**
  * جدول. columns: [{ title, render(row, i) | key, class, phone:false, foot }]
- * onRow يجعل الصفّ قابلاً للنقر.
+ * onRow يجعل الصفّ قابلاً للنقر. وafter(row, i) عقدةٌ تُعرض تحت الصفّ بعرض
+ * الجدول كلّه — ما في الطقم تحت سطره مثلاً — أو null.
  */
-export function table(columns, rows, { onRow, rowClass, empty, footer } = {}) {
+export function table(columns, rows, { onRow, rowClass, empty, footer, after } = {}) {
   if (!rows.length && empty) return empty;
   const cols = columns.filter(Boolean);
   const cls = (c) => [c.class ?? '', c.phone === false ? 'col-phone-hide' : ''].join(' ').trim() || null;
   return h('div', { class: 'table-wrap' },
     h('table', { class: 'tbl' },
       h('thead', {}, h('tr', {}, ...cols.map((c) => h('th', { class: cls(c) }, c.title)))),
-      h('tbody', {}, ...rows.map((row, i) => h('tr', {
-        class: [onRow ? 'clickable' : '', rowClass?.(row) ?? ''].join(' ').trim() || null,
-        onclick: onRow ? (e) => { if (!e.target.closest('button, a, input, select')) onRow(row); } : null,
-      }, ...cols.map((c) => h('td', { class: cls(c) }, c.render ? c.render(row, i) : row[c.key] ?? ''))))),
+      h('tbody', {}, ...rows.flatMap((row, i) => {
+        const tr = h('tr', {
+          class: [onRow ? 'clickable' : '', rowClass?.(row) ?? ''].join(' ').trim() || null,
+          onclick: onRow ? (e) => { if (!e.target.closest('button, a, input, select')) onRow(row); } : null,
+        }, ...cols.map((c) => h('td', { class: cls(c) }, c.render ? c.render(row, i) : row[c.key] ?? '')));
+        const below = after?.(row, i) ?? null;
+        return below ? [tr, h('tr', { class: 'row-after' }, h('td', { colspan: String(cols.length) }, below))] : [tr];
+      })),
       footer ? h('tfoot', {}, footer) : null));
 }
 

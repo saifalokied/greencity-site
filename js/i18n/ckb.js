@@ -24,6 +24,13 @@ import v4fixd from './ckb/v4-fix-d.js';
 import v4web from './ckb/v4-web.js';
 import v4desk from './ckb/v4-desk.js';
 import v4srv from './ckb/v4-srv.js';
+import v5web from './ckb/v5-web.js';
+import v5desk from './ckb/v5-desk.js';
+import v5srv from './ckb/v5-srv.js';
+import v5adminweb from './ckb/v5-admin-web.js';
+import v5admindesk from './ckb/v5-admin-desk.js';
+import v5adminsrv from './ckb/v5-admin-srv.js';
+import v5guide from './ckb/v5-guide.js';
 
 export default {
   ...shell, ...reports, ...dashboard, ...stock, ...vouchers,
@@ -34,4 +41,11 @@ export default {
   ...v3,
   /* والرابع أخيراً. */
   ...v4fixa, ...v4fixb, ...v4fixc, ...v4fixd, ...v4web, ...v4desk, ...v4srv,
+  /* والخامس بعده. */
+  ...v5web, ...v5desk, ...v5srv,
+  /* وحساب «مدير» ونسخته (المرحلة الثالثة) في أجزاءٍ وحدها. */
+  ...v5adminweb, ...v5admindesk, ...v5adminsrv,
+  /* ودليل الطلب (PDF): رابطه في الموقع وزرّه في البرنامج. */
+  ...v5guide,
 };
+

@@ -19,32 +19,41 @@
    والطلب المرسَل يحمل معرّف هذا الجهاز ويُحفظ في سجلّه (sb.js): السحابة
    تحمله حتى يُقرَّر، ثم يعود قراره إلى هذا الجهاز وحده ويُحذف منها — لا إلى
    هاتفٍ آخر يدخله الحساب نفسه.
+
+   ومنتقي المنزل وسؤال «تجهيز مكرر» والإرسال نفسه في send.js: سلّة الطالب
+   (menu.js) ترسل بها الطلب نفسه بالقواعد نفسها.
+
+   و«الطالب» يطلب ولا يرى أرصدة المخزن ولا أعدادها (بطلب صاحب المشروع): لا
+   رصيد تحت المادة ولا «ينقص» ولا عددٌ على أزرار الأقسام. يطلب ما يحتاجه،
+   والمدير يحكم حين يوافق. وهو يطلب الإخراج من قائمة الطلبات (menu.js)،
+   ويصل إلى هنا لطلب الإدخال — ففيه المادة الجديدة — أو برابطٍ محفوظ.
+
+   وفي الإخراج «أضف طقماً جاهزاً» (الإصدار الخامس): الطقم بندٌ واحد بعددٍ صحيح،
+   و«ما بداخله» تحته، وللمعتمد كم طقماً يكفي رصيد المخزن المختار. وموادّه تُحسب
+   في الرصيد و«تجهيز مكرر» مع بنود الطلب.
    ======================================================================== */
 
 import {
-  h, clear, icon, num, toast, field, select, fold, today, debounce, modal, fmtDate, soleHouse,
+  h, clear, icon, num, toast, field, select, fold, today, debounce, modal, badge,
 } from '../ui.js';
 import { tx } from '../i18n.js';
 import { OPS, opIcon } from '../ops.js';
-import { insertRequest, rpc, currentUserId } from './sb.js';
+import { currentUserId } from './sb.js';
 import {
-  loadData, canRequest, isDirect, requestTitle, requestHint, go, pcOnline, bySection, NO_SECTION, sectionColor,
+  loadData, canRequest, isDirect, isTrusted, requestTitle, requestHint, go, pcOnline, bySection, NO_SECTION, sectionColor,
 } from './main.js';
+import { WH_KEY, amount, houseSupply, priorChip, housePicker, submitRequest, wholeKits, KIT_QTY_MAX } from './send.js';
 
 /* المسودّة لصاحبها: هاتفٌ واحد قد يدخله موظفان، ولا يُعرض على الثاني طلبٌ
    كتبه الأول — فيرسله المعتمد باسمه سنداً مباشراً وهو طلب طالبٍ ينتظر
    الموافقة. ومسودّة الإصدار السابق بلا صاحب تُمحى (LEGACY). */
 const DRAFT_KEY = (type) => `gc-portal-draft-${currentUserId() ?? 'anon'}-${type}`;
 const LEGACY_DRAFT_KEY = (type) => `gc-portal-draft-${type}`;
-const WH_KEY = 'gc-portal-wh';
-/* أطول ما يُنتظر جواب «ما جُهّز به المنزل» عند الإرسال. */
-const SUPPLY_WAIT = 8 * 1000;
-
-/** الكمية ووحدتها عقدتين: الوحدة («كيس») تُترجم وحدها، و«12 كيس» معاً لا. */
-const amount = (value, unit) => [num(Math.max(0, Number(value) || 0)), unit ? [' ', h('span', {}, unit)] : null];
 
 export async function request({ content, route }) {
   const type = route.param === 'in' ? 'in' : 'out';
+  /* أرصدة المخزن للمعتمد وحده: الطالب يطلب بلا أعداد (أعلاه). */
+  const showStock = isTrusted();
   if (!canRequest(type)) {
     content.append(h('div', { class: 'card' }, h('div', { class: 'empty' },
       h('div', { class: 'e-icon' }, icon('lock', 28)), h('b', {}, `لا تملك صلاحية طلب ${OPS[type].label}`),
@@ -92,50 +101,25 @@ export async function request({ content, route }) {
     const it = data.items.find((i) => i.id === itemId);
     return Number(it?.stock?.[s.warehouse_id] ?? 0);
   };
-  const wanted = (itemId) => s.lines.filter((l) => l.item_id === itemId).reduce((t, l) => t + (Number(l.qty) || 0), 0);
+  /* المطلوب من المادة في الطلب كلّه: بنودها، وما في الأطقم منها × عددها. */
+  const wanted = (itemId) => s.lines.reduce((t, l) => t + (l.kit_id
+    ? (l.contents ?? []).filter((c) => c.item_id === itemId).reduce((u, c) => u + c.qty * (Number(l.qty) || 0), 0)
+    : l.item_id === itemId ? Number(l.qty) || 0 : 0), 0);
+  /* الأطقم في الإخراج وحده — والطقم الذي فيه مادةٌ موقوفة لا يصل هنا (loadData). */
+  const kits = type === 'out' ? data.kits ?? [] : [];
 
   /* --------------------------- ما جُهّز به المنزل ---------------------------
-     لكل منزلٍ يُختار: مادةٌ ← ما خرج إليه منها وما أُرجع، وآخر مرة. يُسأل
-     عنه مرّة لكل منزل في الطلب الواحد. وإن لم يُجب — الدالّة غائبة في سكربت
-     سحابة قديم، أو انقطع الإنترنت — فلا تنبيه، ولا يتعطّل الإرسال لأجله. */
+     لكل منزلٍ يُختار في الإخراج (send.js): يُنبَّه في سطر المادة، ويُسأل عنه
+     مرّة عند الإرسال. */
 
-  const supplyCache = new Map();   // house_id ← Promise<Map<item_id, prior>>
-  let supply = new Map();          // ما جُهّز به supplyHouse
-  let supplyHouse = null;
-  let supplyReady = Promise.resolve();
-
-  function loadSupply() {
-    if (type !== 'out') return;
-    const house = s.house_id;
-    if (supplyHouse !== house) {
-      /* تنبيهات المنزل السابق تُمحى فوراً، لا حين يصل جواب الجديد. */
-      supply = new Map();
-      supplyHouse = house;
-      paintLines();
-    }
-    if (!house) {
-      supplyReady = Promise.resolve();
-      return;
-    }
-    if (!supplyCache.has(house)) {
-      supplyCache.set(house, rpc('gc_house_supply', { p_house: house })
-        /* ما أُرجع كلّه لا يُنبَّه عليه: لم يبقَ في المنزل منه شيء. */
-        .then((list) => new Map((Array.isArray(list) ? list : [])
-          .filter((p) => Number(p.net) > 1e-9).map((p) => [Number(p.item_id), p])))
-        .catch(() => {
-          supplyCache.delete(house);   // يُسأل ثانيةً حين يُختار المنزل من جديد
-          return new Map();
-        }));
-    }
-    supplyReady = supplyCache.get(house).then((map) => {
-      if (s.house_id !== house || !content.isConnected) return;
-      supply = map;
-      paintLines();
-    });
-  }
-
-  const priorOf = (itemId) => (type === 'out' && itemId && supplyHouse === s.house_id
-    ? supply.get(Number(itemId)) ?? null : null);
+  const supply = houseSupply({
+    houseOf: () => s.house_id,
+    active: () => type === 'out',
+    alive: () => content.isConnected,
+    onChange: () => paintLines(),
+  });
+  const loadSupply = supply.load;
+  const priorOf = supply.priorOf;
 
   /* ------------------------------ الرأس ------------------------------ */
 
@@ -143,19 +127,24 @@ export async function request({ content, route }) {
     opIcon(type, 24, true),
     h('div', { class: 'title' }, h('b', {}, requestTitle(type)), h('small', {}, requestHint(type))));
 
-  const stale = h('div', { class: 'stale-note' }, icon('info', 15),
-    pcOnline()
-      ? 'الأرصدة كما رُفعت من الحاسوب الرئيسي قبل لحظات.'
-      : 'الحاسوب الرئيسي غير متصل الآن — الأرصدة كما كانت عند آخر رفع، وطلبك يصله حين يُفتح.');
+  /* والطالب لا يرى الأرصدة: يُقال له متى يصل طلبه، لا متى رُفعت. */
+  const stale = h('div', { class: 'stale-note' }, icon('info', 15), pcOnline()
+    ? (showStock ? 'الأرصدة كما رُفعت من الحاسوب الرئيسي قبل لحظات.' : 'الحاسوب الرئيسي متصل — ما تطلبه يصله خلال ثوانٍ.')
+    : (showStock
+      ? 'الحاسوب الرئيسي غير متصل الآن — الأرصدة كما كانت عند آخر رفع، وطلبك يصله حين يُفتح.'
+      : 'الحاسوب الرئيسي غير متصل الآن — طلبك يُحفظ ويصله حين يُفتح.'));
 
   /* ------------------------------ المواد ------------------------------ */
 
   const linesBox = h('div', { class: 'lines' });
   const picker = itemPicker();
   const browser = sectionBrowser();
+  const kitBtn = kits.length
+    ? h('button', { type: 'button', class: 'btn btn-block p-add-kit', onclick: () => chooseKit() }, icon('kit', 17), 'أضف طقماً جاهزاً')
+    : null;
   const itemsCard = h('div', { class: 'card', 'data-op': type },
     h('div', { class: 'card-head' }, h('h3', {}, icon('box', 18), 'المواد'), h('span', { class: 'sub', id: 'lines-count' })),
-    h('div', { class: 'card-body' }, browser.node, picker.node, linesBox));
+    h('div', { class: 'card-body' }, kitBtn, browser.node, picker.node, linesBox));
 
   /* ------------------------------ التفاصيل ------------------------------ */
 
@@ -169,7 +158,13 @@ export async function request({ content, route }) {
   });
   const dateInput = h('input', { type: 'date', value: s.date, max: today(), oninput: (e) => { s.date = e.target.value; saveDraft(); } });
   const text = (key, placeholder) => h('input', { value: s[key], placeholder, 'data-k': key, oninput: (e) => { s[key] = e.target.value; saveDraft(); } });
-  const housePick = type === 'out' ? housePicker() : null;
+  const housePick = type === 'out'
+    ? housePicker({
+        houses: data.houses,
+        value: s.house_id,
+        onChange: (id) => { s.house_id = id; paintSummary(); saveDraft(); loadSupply(); },
+      })
+    : null;
 
   const sumBox = h('div', { class: 'sum-box' });
   const sendBtn = h('button', { class: 'btn btn-op btn-lg btn-block', 'data-op': type, onclick: send },
@@ -213,7 +208,8 @@ export async function request({ content, route }) {
       h('button', { class: 'btn btn-sm btn-ghost', onclick: () => { clearDraft(type); clear(draftBox); } }, 'تجاهله')));
   }
 
-  content.append(head, stale, draftBox, h('div', { class: 'entry' }, side, itemsCard));
+  const entry = h('div', { class: 'entry' }, side, itemsCard);
+  content.append(head, stale, draftBox, entry);
   /* القسم الذي جاء منه مفتوحاً بموادّه: يأخذ منه ما بقي. و0 «بلا قسم». */
   if (ask.section) browser.openSection(ask.section === '0' || ask.section === NO_SECTION ? NO_SECTION : Number(ask.section));
   paintLines();
@@ -270,7 +266,8 @@ export async function request({ content, route }) {
 
   function addLine(line) {
     /* المادة الجديدة تُعرف باسمها: «بلوك 20» مرّتين في الطلب سطرٌ واحد. */
-    const existing = s.lines.find((l) => (line.item_id ? l.item_id === line.item_id : !l.item_id && fold(l.name) === fold(line.name)));
+    const existing = s.lines.find((l) => (line.item_id ? l.item_id === line.item_id
+      : !l.item_id && !l.kit_id && fold(l.name) === fold(line.name)));
     if (existing) {
       focusQty(s.lines.indexOf(existing));
       toast(`«${line.name}» في الطلب مسبقاً — عدّل كميته`, 'info');
@@ -305,8 +302,84 @@ export async function request({ content, route }) {
     paintSummary();
   }
 
+  /* ------------------------------ الأطقم ------------------------------ */
+
+  /** كم طقماً يكفي رصيد المخزن المختار — للمعتمد وحده. */
+  const enoughFor = (kit) => Math.max(0, Math.floor(Math.min(...kit.lines.map((l) => available(l.item_id) / l.qty))));
+
+  /** «أضف طقماً جاهزاً»: الأطقم بأسمائها، وللمعتمد كم يكفي منها. */
+  function chooseKit() {
+    modal({
+      title: 'أضف طقماً جاهزاً',
+      body: (close) => h('div', { class: 'p-kit-sheet' }, ...kits.map((k) => h('button', {
+        type: 'button', class: 'p-kit-pick', 'data-kit': k.id, style: `--sc:${k.color || 'var(--op-out)'}`,
+        onclick: () => { close(); addKit(k); },
+      }, h('span', { class: 'pmi-ico' }, icon(k.icon || 'kit', 20)),
+      h('div', { class: 'pmi-main' }, h('div', { class: 'pmi-name' }, k.name),
+        h('div', { class: 'pmi-meta' }, h('span', {}, num(k.lines.length), ' ', h('span', {}, 'مادة')),
+          showStock ? h('span', { class: 'p-kit-enough' }, h('span', {}, 'يكفي لـ'), ' ', num(enoughFor(k)), ' ', h('span', {}, 'طقم')) : null)),
+      icon('plus', 18)))),
+    });
+  }
+
+  function addKit(kit) {
+    const at = s.lines.findIndex((l) => l.kit_id === kit.id);
+    if (at >= 0) {
+      focusQty(at);
+      toast(`«${kit.name}» في الطلب مسبقاً — عدّل عدده`, 'info');
+      return;
+    }
+    s.lines.push({
+      kit_id: kit.id, name: kit.name, unit: 'طقم', qty: '1', notes: '',
+      contents: kit.lines.map(({ item_id, name, unit, qty }) => ({ item_id, name, unit, qty })),
+    });
+    paintLines();
+    focusQty(s.lines.length - 1);
+    saveDraft();
+  }
+
+  /** سطر الطقم: اسمه وشارته، وعدده صحيحاً، و«ما بداخله» — وما جُهّز به المنزل من موادّه. */
+  function kitRow(line, i) {
+    const before = (line.contents ?? []).filter((c) => priorOf(c.item_id)).length;
+    const short = type === 'out' && showStock && (line.contents ?? []).some((c) => available(c.item_id) - wanted(c.item_id) < -1e-9);
+    const whole = wholeKits(line.qty);
+    return h('div', { class: `line p-kit-line${short || (line.qty !== '' && !whole) ? ' short' : ''}${before ? ' p-resupply' : ''}`, 'data-kit': line.kit_id },
+      h('span', { class: 'ln-n' }, String(i + 1)),
+      h('div', {},
+        h('div', { class: 'ln-name' }, h('span', { translate: 'no' }, line.name), ' ', badge('طقم جاهز', 'info')),
+        h('div', { class: 'ln-meta' },
+          line.qty !== '' && !whole ? h('span', { class: 'bad' }, 'اكتب عدداً صحيحاً من 1 إلى 999') : null,
+          short ? h('span', { class: 'bad' }, 'لا يكفي رصيد بعض موادّه') : null),
+        before && s.house_id
+          ? h('div', { class: 'p-prior' }, icon('history', 13), h('span', {}, `سبق تجهيز ${num(before)} من موادّه لهذا المنزل`))
+          : null,
+        h('details', { class: 'p-kit-details' }, h('summary', {}, h('span', {}, 'ما بداخله'), ' (', num((line.contents ?? []).length), ')'),
+          h('div', { class: 'small muted' }, 'الكمية لطقمٍ واحد'),
+          h('ul', { class: 'p-kit-list' }, ...(line.contents ?? []).map((c) => h('li', {},
+            h('span', { class: 'pkl-name' }, c.name), h('b', { class: 'pkl-qty' }, ...amount(c.qty, c.unit))))))),
+      h('div', { class: 'ln-qty' },
+        h('input', {
+          type: 'number', min: '1', max: String(KIT_QTY_MAX), step: '1', inputmode: 'numeric', value: line.qty, placeholder: '1',
+          'aria-label': 'عدد الأطقم',
+          oninput: (e) => { line.qty = e.target.value; paintSummary(); saveDraft(); },
+          onchange: () => paintLines(),
+          onkeydown: (e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            e.target.blur();
+            paintLines();
+          },
+        }),
+        h('span', {}, 'طقم')),
+      h('button', {
+        class: 'icon-btn sm danger', type: 'button', title: 'حذف السطر',
+        onclick: () => { s.lines.splice(s.lines.indexOf(line), 1); paintLines(); saveDraft(); },
+      }, icon('trash', 16)));
+  }
+
   function lineRow(line, i) {
-    const bal = line.item_id ? available(line.item_id) : null;
+    if (line.kit_id) return kitRow(line, i);
+    const bal = showStock && line.item_id ? available(line.item_id) : null;
     const prior = priorOf(line.item_id);
     const section = line.item_id ? null : data.categories.find((c) => c.id === Number(line.category_id));
     const metaRow = h('div', { class: 'ln-meta' });
@@ -349,23 +422,14 @@ export async function request({ content, route }) {
     return row;
   }
 
-  /**
-   * شارة التنبيه تحت سطر المادة، أجزاءً تُترجم كلٌّ وحده:
-   * «جُهّز لهذا المنزل سابقاً: 12 كيس — آخر مرة 3 أكتوبر 2026».
-   */
-  function priorChip(prior, unit) {
-    return h('div', { class: 'p-prior' }, icon('history', 13),
-      h('span', {}, h('span', {}, 'جُهّز لهذا المنزل سابقاً:'), ' ', ...amount(prior.net, unit),
-        prior.last_date ? [' — ', h('span', {}, 'آخر مرة'), ' ', fmtDate(prior.last_date)] : null));
-  }
-
   function paintSummary() {
     const filled = s.lines.filter((l) => Number(l.qty) > 0);
     const total = filled.reduce((t, l) => t + Number(l.qty), 0);
-    const short = type === 'out'
-      ? [...new Set(s.lines.map((l) => l.item_id).filter(Boolean))].filter((id) => available(id) - wanted(id) < -1e-9).length
+    const short = type === 'out' && showStock
+      ? [...new Set(s.lines.flatMap((l) => (l.kit_id ? (l.contents ?? []).map((c) => c.item_id) : [l.item_id])).filter(Boolean))]
+        .filter((id) => available(id) - wanted(id) < -1e-9).length
       : 0;
-    const again = s.lines.filter((l) => priorOf(l.item_id)).length;
+    const again = s.lines.filter((l) => (l.kit_id ? (l.contents ?? []).some((c) => priorOf(c.item_id)) : priorOf(l.item_id))).length;
     const counter = itemsCard.querySelector('#lines-count');
     if (counter) counter.textContent = s.lines.length ? `${s.lines.length} مادة` : '';
     clear(sumBox).append(
@@ -379,6 +443,10 @@ export async function request({ content, route }) {
       type === 'out' && !s.house_id ? h('div', { class: 'sum-row', style: 'color:var(--warn);margin-top:6px' }, icon('map', 15), 'اختر وجهة الإخراج') : null);
     sendBtn.disabled = sending || !filled.length || (type === 'out' && !s.house_id);
     phoneSend.disabled = sendBtn.disabled;
+    /* ما يُرسل الآن لا يُعدَّل تحته — ولا تُستعاد فوقه مسودّة: المنزل الذي
+       سُئل عمّا جُهّز به هو الذي يُرسل إليه، والأسطر كما ضُغط «إرسال». */
+    entry.inert = sending;
+    draftBox.inert = sending;
   }
 
   /* ------------------------------ الإرسال ------------------------------ */
@@ -387,57 +455,21 @@ export async function request({ content, route }) {
     const filled = s.lines.filter((l) => Number(l.qty) > 0);
     if (!filled.length || sending) return;
     if (type === 'out' && !s.house_id) return toast('اختر القطاع والمنزل', 'error');
+    /* الطقم بعددٍ صحيح: «نصف طقم» لا معنى له، والحاسوب يردّه. */
+    if (filled.some((l) => l.kit_id && !wholeKits(l.qty))) return toast('اكتب عدداً صحيحاً من 1 إلى 999', 'error');
     sending = true;
     paintSummary();
     try {
-      if (type === 'out') {
-        /* السؤال عمّا جُهّز به المنزل ربما لم يصل بعد: يُنتظر، فلا يُرسل
-           تجهيزٌ مكرر بلا تنبيه لأن الضغط سبق الجواب. ولا يُنتظر أكثر من
-           ثوانٍ: جوابٌ علِق في شبكة الهاتف لا يحبس الطلب — كأنه فشل. */
-        await Promise.race([supplyReady, new Promise((resolve) => { setTimeout(resolve, SUPPLY_WAIT); })]);
-        if (!content.isConnected) return;
-        const again = filled.filter((l) => priorOf(l.item_id));
-        if (again.length && !(await confirmResupply(again))) {
-          sending = false;
-          paintSummary();
-          return;
-        }
+      /* send.js: ما جُهّز به المنزل يُسأل عنه، ثم يُرسل الطلب بمعرّفه. */
+      const done = await submitRequest({ ...s, type }, { supply, houses: data.houses, alive: () => content.isConnected });
+      if (!done) {
+        /* «لا، راجع الطلب»: يبقى كما هو ليُراجَع. */
+        sending = false;
+        paintSummary();
+        return;
       }
-      /* insertRequest يُلحق بالطلب معرّف هذا الجهاز، وما وصل يُحفظ في سجلّه
-         (sb.js): إليه وحده يعود قراره. وdirect كما كان الحساب يوم أُرسل —
-         يُعرض به الطلب حتى تُقرأ السحابة. */
-      const fresh = await insertRequest({
-        id: s.id,
-        type,
-        warehouse_id: Number(s.warehouse_id),
-        house_id: type === 'out' ? s.house_id : null,
-        voucher_date: s.date || today(),
-        party: s.party.trim(),
-        receiver_name: s.receiver_name.trim(),
-        reference: s.reference.trim(),
-        notes: s.notes.trim(),
-        lines: filled.map((l) => {
-          const prior = priorOf(l.item_id);
-          return {
-            item_id: l.item_id ?? null, name: l.name, unit: l.unit ?? '', sku: l.sku ?? '',
-            qty: Number(l.qty), notes: l.notes ?? '',
-            /* المادة الجديدة في القسم الذي اختاره صاحب الطلب — به يضيفها المدير. */
-            ...(l.item_id ? {} : { category_id: Number(l.category_id) || null }),
-            /* للعلم: أُرسل وهو يعلم أن المنزل جُهّز بها. والحاسوب الرئيسي يحسب ذلك بنفسه. */
-            ...(prior ? { resupply: true, prior_net: Number(prior.net) || 0, prior_date: prior.last_date ?? '' } : {}),
-          };
-        }),
-      }, { direct: isDirect(type) });
       sent = true;
       clearDraft(type);
-      /* المعرّف وصل من قبل — إرسالٌ سابق انقطع جوابه: ما وصل هو الأول، فلا
-         يُقال «أُرسل» عن تعديلٍ لم يصل. */
-      if (!fresh) toast('أُرسل هذا الطلب مسبقاً', 'info');
-      else {
-        toast(isDirect(type)
-          ? 'أُرسل — يُسجَّل سنداً حين يتّصل الحاسوب الرئيسي'
-          : 'أُرسل الطلب إلى المدير', 'success');
-      }
       /* جاء من القسم برابطٍ فيه موادّه: «رجوع» بعد الإرسال يفتح نموذجاً فارغاً
          كما بعد كل طلب — لا الطلبَ نفسه مملوءاً فيُرسَل ثانيةً. */
       if (Object.keys(ask).length) history.replaceState(null, '', `#/new/${type}`);
@@ -450,38 +482,6 @@ export async function request({ content, route }) {
     }
   }
 
-  /**
-   * «تجهيز مكرر»: يُسأل مرّة عند الإرسال، بالكلمات نفسها التي يسأل بها
-   * البرنامج المدير. والتركيز على «لا»: ضغطةٌ عجلى لا تُرسل بلا قراءة.
-   */
-  function confirmResupply(again) {
-    const house = data.houses.find((x) => x.id === s.house_id);
-    return new Promise((resolve) => {
-      let answered = false;
-      const answer = (yes, close) => { answered = true; close(); resolve(yes); };
-      modal({
-        title: 'تجهيز مكرر',
-        body: h('div', { class: 'form-grid' },
-          h('div', { class: 'warn-box' }, icon('alert', 18), h('div', {},
-            h('b', {}, 'تم تجهيز هذه المواد سابقاً لهذا المنزل — هل تريد تجهيزه مجدداً؟'),
-            house ? h('div', { class: 'small' }, h('span', {}, 'المنزل'), ' ', h('b', { class: 'ltr', translate: 'no' }, house.code)) : null)),
-          h('div', { class: 'p-again-list' }, ...again.map((l) => {
-            const prior = priorOf(l.item_id);
-            return h('div', { class: 'p-again' },
-              h('b', {}, l.name),
-              h('div', { class: 'small' }, h('span', {}, 'جُهّز سابقاً'), ': ', ...amount(prior.net, l.unit),
-                prior.last_date ? [' — ', h('span', {}, 'آخر مرة'), ' ', fmtDate(prior.last_date)] : null),
-              h('div', { class: 'small' }, h('span', {}, 'المطلوب الآن'), ': ', h('b', {}, ...amount(l.qty, l.unit))));
-          }))),
-        footer: (close) => [
-          h('button', { class: 'btn', autofocus: true, onclick: () => answer(false, close) }, icon('edit', 16), 'لا، راجع الطلب'),
-          h('button', { class: 'btn btn-op', 'data-op': 'out', onclick: () => answer(true, close) }, icon('send', 16), 'نعم، أرسل'),
-        ],
-        onClose: () => { if (!answered) resolve(false); },
-      });
-    });
-  }
-
   /* ------------------------------ الأقسام ------------------------------ */
 
   /**
@@ -489,7 +489,8 @@ export async function request({ content, route }) {
    * إن بقيت مواد لم تُوضع في قسم. الضغط على قسم يعرض موادّه مكان الأزرار —
    * أزراراً كبيرة تحت الإبهام بأرصدتها في المخزن المختار — والضغط على مادة
    * يُدرجها ويضع المؤشّر في كميتها. و«كل الأقسام» يعود إلى الأزرار. والبحث
-   * تحتها يبقى يبحث في المواد كلّها.
+   * تحتها يبقى يبحث في المواد كلّها. والطالب يرى الأقسام وموادّها بلا عددٍ
+   * ولا رصيد.
    */
   function sectionBrowser() {
     let open = null;   // مفتاح القسم المفتوح، أو null حين تُعرض الأزرار
@@ -501,7 +502,9 @@ export async function request({ content, route }) {
       return h('button', { type: 'button', class: 'p-sec-item', 'data-item': it.id, onclick: () => pick(it) },
         h('div', { class: 'ps-main' }, h('div', { class: 'ps-name' }, it.name), h('div', { class: 'ps-sku ltr', translate: 'no' }, it.sku)),
         h('span', { class: 'ps-added' }, icon('check', 16)),
-        h('span', { class: `ps-bal${bal <= 0 ? ' zero' : ''}` }, num(bal), it.unit ? [' ', h('span', {}, it.unit)] : null));
+        showStock
+          ? h('span', { class: `ps-bal${bal <= 0 ? ' zero' : ''}` }, num(bal), it.unit ? [' ', h('span', {}, it.unit)] : null)
+          : it.unit ? h('span', { class: 'ps-unit' }, it.unit) : null);
     };
 
     const pick = (it) => addLine({ item_id: it.id, name: it.name, sku: it.sku, unit: it.unit });
@@ -517,7 +520,8 @@ export async function request({ content, route }) {
         node.append(h('div', { class: 'p-sec-tiles' }, ...groups.map((g) => h('button', {
           type: 'button', class: 'p-sec-tile', style: `--sc:${sectionColor(g)}`,
           onclick: () => { open = g.key; paint(); reveal(); },
-        }, h('span', { class: 'p-sec-ico' }, icon(g.icon, 20)), h('b', {}, g.name), h('span', { class: 'n' }, num(g.items.length))))));
+        }, h('span', { class: 'p-sec-ico' }, icon(g.icon, 20)), h('b', {}, g.name),
+        showStock ? h('span', { class: 'n' }, num(g.items.length)) : null))));
         return;
       }
       const list = [...sec.items].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
@@ -526,7 +530,7 @@ export async function request({ content, route }) {
           h('button', { type: 'button', class: 'btn btn-sm', onclick: () => { open = null; paint(); } }, icon('chevron', 16), 'كل الأقسام'),
           h('span', { class: 'p-sec-ico' }, icon(sec.icon, 18)),
           h('b', {}, sec.name),
-          h('span', { class: 'n' }, `${num(list.length)} مادة`)),
+          showStock ? h('span', { class: 'n' }, `${num(list.length)} مادة`) : null),
         list.length
           ? h('div', { class: 'p-sec-items' }, ...list.map(itemButton))
           : h('div', { class: 'pk-hint' }, 'لا مواد في هذا القسم بعد'),
@@ -591,7 +595,9 @@ export async function request({ content, route }) {
           class: `pk-item${i === marked ? ' on' : ''}`,
           onmousedown: (e) => { e.preventDefault(); pick(it); },
         }, h('div', {}, h('div', { class: 'pk-name' }, it.name), h('div', { class: 'pk-sku ltr', translate: 'no' }, it.sku)),
-        h('span', { class: `pk-bal${bal <= 0 ? ' zero' : ''}` }, ...amount(bal, it.unit))));
+        showStock
+          ? h('span', { class: `pk-bal${bal <= 0 ? ' zero' : ''}` }, ...amount(bal, it.unit))
+          : it.unit ? h('span', { class: 'pk-unit' }, it.unit) : null));
       });
       if (offerNew) {
         list.append(h('div', {
@@ -672,84 +678,6 @@ export async function request({ content, route }) {
         }, icon('plus', 16), 'إدراج في الطلب'),
       ],
     });
-  }
-
-  /* ------------------------------ منتقي المنزل ------------------------------ */
-
-  function housePicker() {
-    const houses = data.houses;
-    const blocks = [];
-    for (const x of houses) {
-      if (!blocks.some((b) => b.id === x.block_id)) blocks.push({ id: x.block_id, code: x.block_code, color: x.color });
-    }
-    let block = blocks[0]?.id ?? null;
-    const chosen = h('div', {});
-    const chips = h('div', { class: 'block-chips' });
-    const grid = h('div', { class: 'house-grid' });
-    /* من اليسار لـ«D-15»، وفارغةً من اليمين (app.css ‎:placeholder-shown‎)
-       فيُقرأ تلميحها العربي كما كُتب. */
-    const quick = h('input', { placeholder: 'رقم المنزل أو رمزه (D-15)…', class: 'ltr', style: 'text-align:right', autocomplete: 'off' });
-    const note = h('div', { class: 'hint', style: 'color:var(--warn);font-weight:600', hidden: true });
-    const pickBox = h('div', { class: 'house-pick' }, quick, note, chips, grid);
-
-    const paintChosen = () => {
-      const x = houses.find((y) => y.id === s.house_id);
-      clear(chosen).append(x
-        ? h('div', { class: 'chosen-house' }, icon('map', 18),
-            h('div', { style: 'flex:1' }, h('b', {}, `قطاع ${x.block_code} — منزل ${x.number}`),
-              h('div', { class: 'small muted' }, h('span', { class: 'ltr' }, x.code), ` · الإنجاز ${x.progress}%`)),
-            h('button', {
-              class: 'btn btn-sm btn-ghost', type: 'button',
-              onclick: () => { s.house_id = null; quick.value = ''; paintGrid(); paintChosen(); paintSummary(); loadSupply(); },
-            }, 'تغيير'))
-        : null);
-      pickBox.hidden = Boolean(x);
-    };
-
-    const paintGrid = () => {
-      clear(chips).append(...blocks.map((b) => h('button', {
-        type: 'button', class: b.id === block ? 'on' : null, style: `--bc:${b.color}`,
-        onclick: () => { block = b.id; quick.value = ''; paintGrid(); },
-      }, b.code)));
-      const q = quick.value.trim().toUpperCase();
-      /* المطابق تماماً أوّلاً: «C-1» هو C-1 لا C-12 — وEnter يأخذ الأول. */
-      const exact = (x) => (x.code.toUpperCase() === q ? 0 : x.number === q ? 1 : 2);
-      const list = q
-        ? houses.filter((x) => exact(x) < 2 || x.code.toUpperCase().includes(q)).sort((a, b) => exact(a) - exact(b))
-        : houses.filter((x) => x.block_id === block);
-      clear(grid).append(...list.slice(0, 120).map((x) => h('button', {
-        type: 'button', title: `${x.code} — ${x.progress}٪`, style: `--p:${x.progress}%`,
-        class: x.id === s.house_id ? 'on' : null, 'data-house': x.id,
-        onclick: () => { s.house_id = x.id; note.hidden = true; paintChosen(); paintGrid(); paintSummary(); saveDraft(); loadSupply(); },
-      }, q ? `${x.block_code}·${x.number}` : x.number)));
-      if (!list.length) grid.append(h('div', { class: 'hint' }, q ? 'لا منزل بهذا الرقم' : 'اختر القطاع'));
-    };
-
-    quick.addEventListener('input', () => { note.hidden = true; paintGrid(); });
-    quick.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      if (!quick.value.trim()) return;
-      const hit = soleHouse(houses, quick.value);
-      if (hit) {
-        grid.querySelector(`[data-house="${hit.id}"]`)?.click();
-        return;
-      }
-      /* رقمٌ في قطاعين (D-15 وC-15): لا يُختار أوّلهما — يُختار بالضغط. */
-      note.textContent = 'أكثر من منزل بهذا الرقم — اختر من القائمة أو اكتب الرمز كاملاً';
-      note.hidden = !grid.querySelector('button');
-    });
-
-    const node = h('div', { class: 'field' }, h('span', {}, 'الوجهة — القطاع والمنزل'), chosen, pickBox);
-    const set = (id) => {
-      s.house_id = id;
-      const x = houses.find((y) => y.id === id);
-      if (x) block = x.block_id;
-      paintGrid();
-      paintChosen();
-    };
-    set(s.house_id);
-    return { node, set };
   }
 
   return null;

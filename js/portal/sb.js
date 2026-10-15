@@ -173,6 +173,18 @@ export async function all(path, page = 1000) {
 }
 
 /**
+ * صفحةٌ بعددها الكلّي: { rows, total } — لشاشات «الإدارة» (admin.js): السجلّ يُقرأ صفحةً
+ * صفحة بمرشّحاته لا جدولاً كاملاً. وtotal null إن لم يُرسل الخادم Content-Range (أو
+ * حجبته CORS): تعرض الشاشة حينئذ «المزيد» ما دامت الصفحة ملأى.
+ */
+export async function page(path, { limit = 50, offset = 0 } = {}) {
+  const sep = path.includes('?') ? '&' : '?';
+  const { data, res } = await call(`/rest/v1/${path}${sep}limit=${limit}&offset=${offset}`, { headers: { Prefer: 'count=exact' } });
+  const m = /\/(\d+)$/.exec(res.headers.get('content-range') ?? '');
+  return { rows: Array.isArray(data) ? data : [], total: m ? Number(m[1]) : null };
+}
+
+/**
  * يُرسل طلباً. المعرّف من المتصفّح: إن أُعيد الإرسال بعد انقطاع لم يتكرّر.
  * يُرجع true إن كُتب الآن، وfalse إن كان المعرّف قد وصل من قبل — فيُقال
  * لصاحبه «أُرسل مسبقاً» لا «أُرسل»: ما عدّله بعد الإرسال الأول لم يصل.
@@ -326,15 +338,20 @@ const STAGE = { pending: 0, received: 1, posted: 2, rejected: 2, cancelled: 3, w
 /* وupdated_at آخر تغييرٍ على القرار في السحابة: به يُحذف منها ما حُفظ هنا
    كما هو، لا قرارٌ أحدث منه (gc_ack_request). وread_at متى بدأت القراءة التي
    حُفظ منها — بساعة هذا الجهاز: قراءةٌ بدأت قبلها لا تغلبه (mergeHistory). */
+/* والإصدار الخامس: متى وصل إلى الحاسوب الرئيسي، ومرحلة تجهيزه (track.js).
+   وprep_status بلا قيمة (null) لا '': سطرٌ لم يحمله قطّ — سحابةٌ لم يُعَد فيها
+   السكربت، أو سجلٌّ من قبل — فلا يُوعد صاحبه بمرحلة تجهيزٍ لن تصل. */
 const ENTRY = {
   id: null, type: 'out', warehouse_id: null, house_id: null, voucher_date: '', party: '', receiver_name: '',
   reference: '', notes: '', lines: null, direct: false, created_at: null, status: 'pending', decision_note: '',
   voucher_number: '', decided_by: '', decided_at: null, updated_at: null, read_at: null,
+  received_at: null, prep_status: null, prepared_at: null, prepared_by: '',
 };
 
 const time = (value) => Date.parse(value ?? '') || 0;
-/** آخر ما جرى على الطلب: قراره، وإلا إرساله. */
-const lastActivity = (e) => Math.max(time(e.decided_at), time(e.created_at));
+/** آخر ما جرى على الطلب: تجهيزه أو قراره، وإلا إرساله. */
+const lastActivity = (e) => Math.max(time(e.decided_at), time(e.prepared_at), time(e.created_at));
+
 /** الأحدث إرسالاً أوّلاً — كما تُعرض الطلبات. */
 export const byCreated = (a, b) => time(b.created_at) - time(a.created_at) || String(b.id).localeCompare(String(a.id));
 
@@ -665,3 +682,95 @@ export async function withdrawOp(id, row = null) {
 /** عمليات الحساب كما تُعرض: تُدمج بسجلّ الجهاز وتُحفظ، ثم يُحذف ما وصل قراره. */
 export const settleOps = (uid, cloud, ack = ackOp, now = Date.now(), device = deviceId()) =>
   opLog.settle(uid, cloud, ack, now, device);
+
+/* ======================== سلّة الطالب على هذا الجهاز ========================
+   «الطالب» يطلب من قائمة الطلبات (menu.js) كما يطلب الطعام: يضيف المواد إلى
+   سلّةٍ ثم يرسلها طلباً واحداً. والسلّة على الهاتف لا في السحابة، ولكل حساب
+   سلّته (gc-portal-cart-<معرّفه>): تبقى بعد إعادة فتح الصفحة، ولا تُعرض على
+   موظفٍ آخر يدخل من الهاتف نفسه.
+
+   وفيها معرّف الطلب الذي ستصير إليه: يبقى معها حتى يُرسل، فإرسالٌ انقطع
+   جوابه ثم أُعيد لا يتكرّر (insertRequest) — وتُفرَّغ بعد الإرسال فتأخذ
+   معرّفاً جديداً. وأسطرها المادة وكميتها وحدهما: اسمها ووحدتها من المواد
+   حين تُعرض، وما أُوقف منها يسقط (menu.js). والطقم الجاهز (الإصدار الخامس)
+   سطرٌ بمعرّفه وعدده { kit_id, qty } — عددٌ صحيح من ١ إلى ٩٩٩.
+
+   ومتصفّحٌ لا يحفظ ما يُكتب فيه — أو امتلأ تخزينه — تبقى السلّة في الصفحة ما
+   دامت مفتوحة، ولا تغلبها سلّةٌ أقدم بقيت في التخزين. */
+
+const CART_PREFIX = 'gc-portal-cart';
+/* ما لم يُحفظ في التخزين من سلال هذه الصفحة: معرّف الحساب ← السلّة. */
+const cartMemo = new Map();
+
+export const cartKey = (uid) => `${CART_PREFIX}-${uid}`;
+
+/**
+ * السلّة كما تُحفظ: معرّف الطلب، ونوعه، ومنزله، وملاحظاته، والأسطر —
+ * كل مادة مرّةً بكميةٍ موجبة، وكل طقمٍ مرّةً بعددٍ صحيح من ١ إلى ٩٩٩. والسطر
+ * مادةٌ أو طقم لا الاثنان. وما سوى ذلك (سلّةٌ تالفة) يُصحَّح أو يسقط، والترتيب
+ * كما كان.
+ */
+export function normalCart(raw) {
+  const cart = isObject(raw) ? raw : {};
+  const seen = new Set();
+  const lines = [];
+  for (const line of Array.isArray(cart.lines) ? cart.lines : []) {
+    const qty = Number(line?.qty);
+    const isKit = line?.kit_id !== undefined && line?.kit_id !== null;
+    if (isKit) {
+      const kit = Number(line.kit_id);
+      if (line.item_id !== undefined && line.item_id !== null) continue;
+      if (!Number.isInteger(kit) || kit <= 0 || !Number.isInteger(qty) || qty < 1 || qty > 999 || seen.has(`k${kit}`)) continue;
+      seen.add(`k${kit}`);
+      lines.push({ kit_id: kit, qty });
+      continue;
+    }
+    const id = Number(line?.item_id);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isFinite(qty) || qty <= 0 || seen.has(`i${id}`)) continue;
+    seen.add(`i${id}`);
+    lines.push({ item_id: id, qty });
+  }
+  return {
+    id: typeof cart.id === 'string' && cart.id ? cart.id : randomId(),
+    type: cart.type === 'in' ? 'in' : 'out',
+    house_id: Number.isInteger(cart.house_id) ? cart.house_id : null,
+    notes: typeof cart.notes === 'string' ? cart.notes : '',
+    lines,
+  };
+}
+
+/** سلّة الحساب على هذا الجهاز — أو null إن لم تكن له سلّة. */
+export function readCart(uid) {
+  if (!uid) return null;
+  const kept = cartMemo.get(String(uid));
+  if (kept) return normalCart(kept);
+  let raw = null;
+  try { raw = localStorage.getItem(cartKey(uid)); } catch { raw = null; }
+  if (!raw) return null;
+  try {
+    return normalCart(JSON.parse(raw));
+  } catch {
+    return null;   // تالفة: كأن لا سلّة
+  }
+}
+
+/**
+ * يحفظ السلّة — والفارغة تُمحى بمعرّفها: السلّة التالية طلبٌ جديد. ويُرجع
+ * هل حُفظت في التخزين، وإلا بقيت في هذه الصفحة وحدها.
+ */
+export function writeCart(uid, cart) {
+  if (!uid) return false;
+  const value = cart?.lines?.length ? normalCart(cart) : null;
+  try {
+    if (value) localStorage.setItem(cartKey(uid), JSON.stringify(value));
+    else localStorage.removeItem(cartKey(uid));
+    cartMemo.delete(String(uid));
+    return true;
+  } catch {
+    if (value) cartMemo.set(String(uid), value);
+    else cartMemo.delete(String(uid));
+    /* ما بقي في التخزين أقدم منها: لا يُقرأ بعد إعادة الفتح على أنه الأحدث. */
+    try { localStorage.removeItem(cartKey(uid)); } catch { /* محجوب */ }
+    return false;
+  }
+}

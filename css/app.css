@@ -1346,3 +1346,77 @@ table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size
 .cust-story .cs-old { color: var(--text-3); }
 .cust-story .cs-new { color: var(--text); }
 .cust-story > .hint { padding-top: 6px; }
+
+/* ============================== الإصدار الخامس: التجهيز ==============================
+   «قيد التجهيز» في «طلبات الموقع»: مربّع اختيارٍ في كل سطر بهدفٍ للإصبع، وشريطٌ لاصق
+   أسفل القائمة «تم التجهيز للمحدد». */
+.req-pick-hit {
+  display: grid; place-items: center; flex: none; width: 44px; height: 44px; margin: -8px 0;
+  margin-inline-start: -8px; border-radius: 10px; cursor: pointer;
+}
+.req-pick-hit:hover { background: var(--surface-3); }
+.req-pick, .req-pick-all { width: 20px; height: 20px; accent-color: var(--op-out); cursor: pointer; }
+.req-bulk-head {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 16px;
+  border-bottom: 1px solid var(--border); font-weight: 600; cursor: pointer;
+}
+.req-bulk-head .hint { margin-inline-start: auto; font-weight: 400; }
+.req-bulk {
+  position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
+  padding: 10px 16px; border-top: 1px solid var(--border); background: var(--surface);
+  box-shadow: 0 -8px 18px -12px rgba(16, 32, 27, .35);
+}
+.req-bulk[hidden] { display: none; }
+.req-bulk-failed ul { margin: 4px 0 0; padding-inline-start: 18px; }
+.req-lacking { margin-bottom: 14px; }
+
+/* ============================== الإصدار الخامس: الأطقم الجاهزة ==============================
+   صفحة «الأطقم الجاهزة» ونموذجها ومعاينته كما يراه الموظف، وشارة «طقم: X × 2» على سطر
+   السند، و«أطقم جاهزة» أوّل أزرار الأقسام في الإخراج، و«ما بداخله» تحت سطر الطقم في
+   درج الطلب. والموقع يحمّل هذا الملف أيضاً: القواعد بأسماء kit- لا تمسّ غيرها. */
+.kit-badge .st-icon { width: 30px; height: 30px; }
+.tbl tr.row-muted td { opacity: .6; }
+.tbl tr.row-after > td { padding-top: 0; background: var(--surface-2); }
+.tbl tr.row-after[hidden] { display: none; }
+.tbl tr.row-kit { background: color-mix(in srgb, var(--info-soft, var(--surface-3)) 45%, transparent); }
+.kit-form .card { margin: 0; }
+.kit-lines { margin-top: 12px; }
+.kit-line { grid-template-columns: 28px minmax(0, 1fr) 150px 34px; }
+@media (max-width: 640px) { .kit-line { grid-template-columns: 26px minmax(0, 1fr) 34px; } }
+.kit-preview {
+  display: flex; align-items: center; gap: 12px; max-width: 460px; padding: 12px 14px;
+  border: 1px solid var(--border); border-inline-start: 4px solid var(--sc); border-radius: 14px;
+  background: var(--surface); box-shadow: var(--shadow-1);
+}
+.kit-preview .kp-ico {
+  flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px;
+  background: color-mix(in srgb, var(--sc) 14%, transparent); color: var(--sc);
+}
+.kit-preview .kp-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.kit-preview .kp-main .sub { font-size: 12.5px; color: var(--text-3); }
+.kit-preview .kp-inside, .kit-preview .kp-add {
+  display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 10px; border-radius: 9px;
+  font-size: 12.5px; font-weight: 600; white-space: nowrap;
+}
+.kit-preview .kp-inside { border: 1px solid var(--border); color: var(--text-2); }
+.kit-preview .kp-add { background: var(--op-out); color: #fff; }
+.kit-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--op-out) 12%, transparent); color: var(--op-out-ink, var(--op-out));
+  font-size: 11.5px; font-weight: 600;
+}
+.kit-chip svg { flex: none; }
+.pk-item.pk-kit { color: var(--op-out-ink, var(--op-out)); border-top: 1px dashed var(--border); }
+.pk-item.pk-kit .pk-sku { color: var(--text-3); }
+.sect-item.kit-item .kit-ico { width: 30px; height: 30px; }
+.kit-contents { display: grid; gap: 4px; max-height: 260px; overflow: auto; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); }
+.kit-content-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+.kit-content-row b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.kit-note { margin: 0; padding: 8px 10px; font-size: 13px; }
+.kit-toggle { margin-top: 4px; padding: 0 8px; height: 28px; font-size: 12px; }
+.kit-toggle[aria-expanded="true"] { background: var(--surface-3); }
+.kit-inside { display: grid; gap: 6px; padding: 8px 4px 4px; }
+.kit-inside .table-wrap { border: 1px solid var(--border); border-radius: 10px; }
+.kit-posted { display: grid; gap: 8px; }
+.ln-note { display: block; }
+.toast.warn svg { color: #fbbf24; }

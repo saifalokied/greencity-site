@@ -553,3 +553,420 @@ button.p-cust:active, button.p-worker:active { background: var(--surface-2); }
   /* درج الأمانة: أزرار الأفعال تلتفّ صفّين تحت الإبهام. */
   .drawer-foot .btn { min-height: 44px; }
 }
+
+/* ==========================================================================
+   قائمة الطلبات — «الطالب» يطلب المواد كما يُطلب الطعام (menu.js)
+   البحث وأزرار الأقسام ملتصقان أعلى الشاشة، والمواد تحت عناوين أقسامها بلون
+   القسم (--sc)، و«أضف» تصير [− الكمية +]، وشريط السلّة فوق الشريط السفلي.
+   ولا أعداد إلا كميات السلّة نفسها. أهدافٌ للإصبع: 40 بكسلاً على الأقل.
+   ========================================================================== */
+
+/* ------------------------------ الشريط الملتصق ------------------------------ */
+
+.p-menu-head { margin-bottom: 10px; }
+.p-menu-top {
+  position: sticky; top: 60px; z-index: 20;
+  display: grid; gap: 8px; margin: 0 -20px 12px; padding: 8px 20px 10px;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.p-menu-search {
+  display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 12px;
+  border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface); cursor: text;
+}
+.p-menu-search:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 22%, transparent); }
+.p-menu-search > svg { flex: none; color: var(--text-3); }
+/* القاعدة العامة للحقول (app.css) أقوى من الصنف: ما يخالفها هنا بـ !important — كخانة البحث في الطلب. */
+.p-menu-search input {
+  min-height: 44px !important; padding: 0 !important; border: 0 !important; box-shadow: none !important;
+  background: transparent !important; font-size: 16px;
+}
+/* صفٌّ واحد يُمرَّر جانباً، من حافّة الشاشة إلى حافّتها. */
+.p-menu-chips {
+  display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  margin: 0 -20px; padding: 2px 20px;
+}
+.p-menu-chips::-webkit-scrollbar { display: none; }
+.chip.p-menu-chip { flex: none; height: 40px; min-height: 40px; padding: 0 14px; border-radius: 20px; white-space: nowrap; }
+.chip.p-menu-chip svg { flex: none; }
+
+/* ------------------------------ الأقسام والمواد ------------------------------ */
+
+.p-menu-sec { margin-bottom: 18px; }
+.p-menu-sec-head { display: flex; align-items: center; gap: 10px; margin: 4px 2px 8px; font-size: 16px; }
+.p-menu-sec-head .p-sec-ico { width: 34px; height: 34px; border-radius: 10px; }
+.p-menu-none {
+  padding: 14px; border: 1px dashed var(--border-strong); border-radius: 14px;
+  color: var(--text-3); font-size: 13px; text-align: center;
+}
+.p-menu-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 8px; }
+.p-menu-item, .p-cart-line {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 12px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+  box-shadow: var(--shadow-1); transition: border-color .15s, background .15s;
+}
+.p-menu-item.in-cart {
+  border-color: color-mix(in srgb, var(--sc, var(--brand)) 55%, transparent);
+  background: color-mix(in srgb, var(--sc, var(--brand)) 6%, var(--surface));
+}
+.pmi-ico {
+  flex: none; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px;
+  background: color-mix(in srgb, var(--sc, var(--text-3)) 14%, transparent); color: var(--sc, var(--text-3));
+}
+.pmi-main { min-width: 0; }
+.pmi-name { font-weight: 700; font-size: 14.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.pmi-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin-top: 2px; font-size: 12.5px; color: var(--text-3); }
+.pmi-unit { font-weight: 600; color: var(--text-2); }
+.p-menu-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.p-menu-more { text-align: center; padding: 10px; }
+
+/* «أضف» ثم [− الكمية +] — بلون المشروع، والكمية تُضغط فتُكتب. */
+.pmi-act { display: flex; justify-content: flex-end; }
+.pmi-add {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px;
+  border: 1.5px solid color-mix(in srgb, var(--brand) 45%, transparent); border-radius: 12px;
+  background: var(--surface); color: var(--brand); font-weight: 700; font-size: 14px; white-space: nowrap;
+}
+.pmi-add:hover { background: color-mix(in srgb, var(--brand) 8%, var(--surface)); }
+.pmi-add:active { transform: translateY(1px); }
+.p-step {
+  display: inline-flex; align-items: center; border-radius: 12px; overflow: hidden;
+  background: var(--brand); color: #fff; box-shadow: var(--shadow-1);
+}
+:root[data-theme="dark"] .p-step { color: #07110d; }
+.p-step button {
+  display: grid; place-items: center; width: 40px; height: 40px; padding: 0;
+  border: 0; background: transparent; color: inherit;
+}
+.p-step button:hover { background: rgba(255, 255, 255, .14); }
+.p-step .ps-qty { width: auto; min-width: 42px; padding: 0 6px; font-weight: 700; font-size: 15.5px; font-variant-numeric: tabular-nums; }
+.p-step button:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+:root[data-theme="dark"] .p-step button:focus-visible { outline-color: #07110d; }
+.pmi-add:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* الكمية مكتوبةً في نافذتها: كبيرةً في الوسط، ووحدتها بجانبها. */
+.p-qty-in { display: flex; align-items: center; gap: 10px; }
+.p-qty-in input { flex: 1 1 auto; font-size: 18px; font-weight: 700; text-align: center; }
+.p-qty-in span { flex: none; font-weight: 600; color: var(--text-2); }
+
+/* ------------------------------ شريط السلّة ------------------------------
+   ملتصقٌ أسفل الشاشة ما دام في السلّة شيء — فوق الشريط السفلي وزرّ الطلب
+   البارز منه (26 بكسلاً) لا عليهما، والقائمة تحته تُفسح له فلا يغطّي آخرها. */
+
+.p-menu.has-cart { padding-bottom: 76px; }
+.p-cart-bar {
+  position: fixed; z-index: 34; bottom: 16px; left: 50%; transform: translateX(-50%);
+  width: min(560px, calc(100% - 24px));
+  display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 8px 14px;
+  border-radius: 16px; background: var(--brand); color: #fff; text-decoration: none;
+  box-shadow: 0 14px 30px -10px rgba(10, 43, 34, .55);
+}
+.p-cart-bar:hover { text-decoration: none; filter: brightness(1.05); }
+:root[data-theme="dark"] .p-cart-bar { color: #07110d; }
+.pcb-ico {
+  position: relative; flex: none; display: grid; place-items: center; width: 40px; height: 40px;
+  border-radius: 12px; background: rgba(255, 255, 255, .16);
+}
+:root[data-theme="dark"] .pcb-ico { background: rgba(0, 0, 0, .14); }
+.pcb-ico b {
+  position: absolute; top: -6px; inset-inline-end: -6px; min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 10px; background: var(--gold); color: #1c1304; font-size: 11.5px; line-height: 20px;
+  text-align: center; font-variant-numeric: tabular-nums;
+}
+.pcb-main { flex: 1; min-width: 0; display: grid; line-height: 1.35; }
+.pcb-main b { font-size: 15px; }
+.pcb-main small { font-size: 12px; opacity: .85; }
+.pcb-go { flex: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+
+/* عدد موادّ السلّة على زرّ «اطلب» في الشريطين */
+.p-cart-n {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.p-nav .p-cart-n { margin-inline-start: 2px; }
+.p-tabbar a { position: relative; }
+.p-tabbar .p-cart-n { position: absolute; top: 4px; inset-inline-start: calc(50% + 4px); box-shadow: 0 0 0 2px var(--surface); }
+
+/* ------------------------------ السلّة ------------------------------ */
+
+.p-cart { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 16px; align-items: start; }
+.p-cart-lines { display: grid; gap: 8px; padding: 12px; }
+.p-cart-line { grid-template-columns: auto minmax(0, 1fr) auto auto; box-shadow: none; }
+.p-cart-line.p-resupply { border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.p-cart-prior { grid-column: 2 / -1; }
+.p-cart-prior .p-prior { margin-top: 0; }
+.p-cart-remove { width: 40px; height: 40px; }
+.p-cart-card .card-foot { justify-content: center; }
+.p-cart-more { min-height: 44px; }
+.p-cart-type .seg { display: flex; width: 100%; }
+.p-cart-type .seg button { flex: 1 1 0; justify-content: center; height: auto; min-height: 44px; white-space: normal; line-height: 1.3; }
+.p-cart-need, .p-cart-kitin, .p-cart-again { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--warn); }
+.p-cart-again { font-weight: 700; }
+.p-cart-need svg, .p-cart-kitin svg, .p-cart-again svg { flex: none; }
+.p-cart-pc { margin: 0; }
+.p-cart-send-btn { min-height: 50px; }
+
+/* «الطالب» في نموذج الطلب: الوحدة مكان الرصيد (request.js). */
+.p-sec-item .ps-unit { font-size: 12.5px; font-weight: 600; color: var(--text-3); white-space: nowrap; }
+.pk-item .pk-unit { margin-inline-start: auto; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .p-cart { grid-template-columns: 1fr; }
+}
+@media (max-width: 860px) {
+  .p-menu-top { margin-inline: -12px; padding-inline: 12px; }
+  .p-menu-chips { margin-inline: -12px; padding-inline: 12px; }
+  .p-cart-bar { bottom: calc(66px + 30px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 480px) {
+  /* سطر السلّة صفّان: الاسم وزرّ الإزالة، ثم الكمية تحته — 320 بكسلاً لا تسع الأربعة. */
+  .p-cart-lines { padding: 10px; }
+  .p-cart-line { grid-template-columns: auto minmax(0, 1fr) auto; padding: 10px; gap: 6px 10px; }
+  .p-cart-line .pmi-act { grid-column: 2 / -1; grid-row: 2; justify-self: end; }
+  .p-menu-item { padding: 10px; gap: 6px 10px; }
+  .pmi-ico { width: 38px; height: 38px; border-radius: 11px; }
+}
+@media (max-width: 359px) {
+  /* أضيق الهواتف: ما في السلّة تنزل كميته تحت اسمه، فلا يُعصر الاسم بجانبها. */
+  .p-menu-item.in-cart { grid-template-columns: auto minmax(0, 1fr); }
+  .p-menu-item.in-cart .pmi-act { grid-column: 1 / -1; justify-self: end; }
+  .pcb-go > span { display: none; }
+}
+
+/* ------------------------------ الإصدار الخامس: متابعة الطلب ------------------------------
+   بعد الاعتماد «قيد التجهيز» (ذهبي) ثم «تم التجهيز» — ومراحل الطلب نقاطاً تحت عنوانه
+   في «طلباتي»، وفي درجه قائمةً من فوق إلى تحت (track.js). */
+
+.req-state.preparing { background: var(--gold-soft); color: #8a6517; }
+:root[data-theme="dark"] .req-state.preparing { color: var(--gold); }
+.req-state.prepared { background: var(--ok-soft); color: var(--ok); }
+
+.p-track-dots { display: flex; align-items: center; gap: 5px; margin-top: 6px; }
+.p-track-dots .dot {
+  width: 9px; height: 9px; border-radius: 50%; flex: none;
+  background: var(--surface-3); border: 1.5px solid var(--border-strong);
+}
+.p-track-dots .dot.done { background: var(--ok); border-color: var(--ok); }
+.p-track-dots .dot.now { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 28%, transparent); }
+.p-track-dots .dot.bad { background: var(--bad); border-color: var(--bad); }
+
+.p-track { list-style: none; margin: 0; padding: 4px 0; display: grid; gap: 0; }
+.p-track-step { position: relative; display: flex; gap: 12px; padding-bottom: 14px; }
+.p-track-step:last-child { padding-bottom: 0; }
+/* الخطّ بين المراحل: من علامة هذه إلى التالية. */
+.p-track-step:not(:last-child)::before {
+  content: ''; position: absolute; inset-inline-start: 13px; top: 28px; bottom: 0; width: 2px;
+  background: var(--border);
+}
+.p-track-step.done:not(:last-child)::before { background: color-mix(in srgb, var(--ok) 55%, transparent); }
+.pt-ico {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--surface-3); color: var(--text-3); border: 2px solid var(--border-strong);
+}
+.p-track-step.done .pt-ico { background: var(--ok); border-color: var(--ok); color: #fff; }
+.p-track-step.now .pt-ico { background: var(--gold-soft); border-color: var(--gold); color: #8a6517; animation: pt-pulse 1.6s ease-in-out infinite; }
+:root[data-theme="dark"] .p-track-step.now .pt-ico { color: var(--gold); }
+.p-track-step.bad .pt-ico { background: var(--bad); border-color: var(--bad); color: #fff; }
+.p-track-step.todo b { color: var(--text-3); font-weight: 600; }
+.pt-main { min-width: 0; flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding-top: 3px; }
+.pt-main > b { font-size: 14px; }
+.p-track-step.bad .pt-main > b { color: var(--bad); }
+.pt-meta { flex-basis: 100%; font-size: 12px; color: var(--text-3); }
+.pt-main .req-note { flex-basis: 100%; margin-top: 2px; }
+@keyframes pt-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--gold) 45%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--gold) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .p-track-step.now .pt-ico { animation: none; }
+}
+
+/* ------------------------------ الإصدار الخامس: «مدير» و«الإدارة» ------------------------------
+   النوع الثالث لحساب الموقع بلونٍ ذهبي، ولوحته وشاشاته (admin.js): شريط الحداثة أوّل كل شاشة،
+   والأرقام، والأزرار، والمرشّحات — على الهاتف (390 بكسلاً) وعلى الحاسوب. */
+
+.p-kind.admin { --kc: #8a6517; --kc-soft: var(--gold-soft); }
+:root[data-theme="dark"] .p-kind.admin { --kc: var(--gold); }
+.hello .perm span.kind.admin { background: color-mix(in srgb, var(--gold) 55%, transparent); color: #fff; }
+
+.p-adm-head { justify-content: space-between; align-items: center; }
+.p-adm-fresh {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-bottom: 14px; padding: 9px 12px;
+  border-radius: var(--radius); background: var(--info-soft); color: var(--text-2); font-size: 13px; line-height: 1.6;
+}
+.p-adm-fresh .paf-main, .p-adm-fresh .paf-off { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.p-adm-fresh .paf-main > svg { color: var(--info); flex: none; }
+.p-adm-fresh .paf-off { color: var(--warn); font-weight: 600; }
+.p-adm-fresh .paf-off > svg { flex: none; }
+.p-adm-note { display: flex; align-items: center; gap: 7px; margin: -6px 0 12px; font-size: 12.5px; color: var(--text-3); }
+.p-adm-note > svg { flex: none; }
+
+.p-adm-kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.p-adm-card .p-adm-kpis { margin-bottom: 0; }
+.p-adm-card { margin-bottom: 16px; border-top: 3px solid var(--gold); }
+
+.p-adm-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.p-adm-tile {
+  display: flex; align-items: center; gap: 11px; min-height: 64px; padding: 11px 13px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); text-decoration: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.p-adm-tile:hover { border-color: var(--gold); box-shadow: var(--shadow-1); text-decoration: none; }
+.p-adm-tile .pat-ico {
+  flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px;
+  background: var(--gold-soft); color: #8a6517;
+}
+:root[data-theme="dark"] .p-adm-tile .pat-ico { color: var(--gold); }
+.p-adm-tile b { display: block; font-size: 14px; }
+.p-adm-tile small { display: block; font-size: 12px; color: var(--text-3); line-height: 1.5; }
+
+.p-adm-tabs { margin-bottom: 10px; }
+.p-adm-tabs .chip { min-height: 38px; }
+.p-adm-filters { margin-bottom: 12px; }
+.p-adm-day { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+.p-adm-day input { width: auto; min-width: 140px; }
+.p-adm-more { min-height: 40px; }
+.p-adm-live { margin-bottom: 12px; border-top: 3px solid var(--warn); }
+.p-adm-short { color: var(--bad); font-weight: 700; }
+.p-adm-in { color: var(--ok); }
+.p-adm-ledger-bar { display: grid; gap: 10px; margin-bottom: 12px; }
+.p-adm-ledger-bar .p-adm-filters { margin-bottom: 0; }
+.p-adm-chosen { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.p-adm-chosen small { color: var(--text-3); }
+.p-adm-pick { display: grid; gap: 2px; max-height: 260px; overflow-y: auto; }
+.p-adm-pick:empty { display: none; }
+.p-adm-pick .pk-item { border: 0; background: none; font: inherit; color: inherit; text-align: start; width: 100%; min-height: 44px; }
+.p-adm-pick .pk-item small { color: var(--text-3); margin-inline-start: auto; }
+.p-adm-house { margin-top: 6px; }
+
+@media (max-width: 560px) {
+  .p-adm-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .p-adm-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .p-adm-tile { flex-direction: column; align-items: flex-start; gap: 6px; min-height: 96px; }
+  .p-adm-filters > * { flex: 1 1 140px; }
+  .p-adm-day input { min-width: 0; flex: 1; }
+}
+
+/* ------------------------------ الإصدار الخامس: رئيسية الطالب ------------------------------
+   زرٌّ كبير واحد «اطلب مواد» أوّل الصفحة، وتحته ما بقي له من الأزرار، وتذكيرٌ بسلّةٍ لم تُرسل. */
+
+.p-ask-hero { margin-bottom: 14px; }
+.p-ask-big {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 16px 18px;
+  border-radius: var(--radius-lg); background: var(--op); color: #fff; text-decoration: none;
+  box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--op) 80%, transparent);
+  transition: filter .15s, transform .15s;
+}
+.p-ask-big:hover { filter: brightness(1.06); text-decoration: none; transform: translateY(-1px); }
+.p-ask-big:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.p-ask-big > svg { flex: none; }
+.p-ask-big b { display: block; font-size: 18px; }
+.p-ask-big small { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.6; opacity: .92; }
+:root[data-theme="dark"] .p-ask-big { color: #07110d; }
+.quick.p-ask-more a { min-height: 56px; }
+.p-ask-cart {
+  display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 10px 14px; margin-bottom: 16px;
+  border-radius: var(--radius); background: var(--gold-soft); color: var(--text); text-decoration: none;
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+}
+.p-ask-cart:hover { text-decoration: none; border-color: var(--gold); }
+.p-ask-cart > svg:first-child { color: #8a6517; flex: none; }
+:root[data-theme="dark"] .p-ask-cart > svg:first-child { color: var(--gold); }
+.p-ask-cart > span { flex: 1; min-width: 0; font-size: 13.5px; }
+.p-ask-cart > b { font-size: 13.5px; white-space: nowrap; }
+/* المخزن الوحيد نصّاً في السلّة: لا اختيار فيه. */
+.p-cart-wh { display: flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--text-2); }
+.p-cart-wh svg { flex: none; color: var(--text-3); }
+
+/* ------------------------------ الإصدار الخامس: الأطقم الجاهزة ------------------------------
+   الطقم بطاقةٌ أوّل قائمة الطلبات (p-kit-item — لا p-menu-item: أسطر المواد تبقى موادَّ)،
+   بأيقونته على لونه وعدد موادّه و«ما بداخله» — بلا رصيد. وفي السلّة سطرٌ بعدده، وفي
+   رئيسية الطالب شريطٌ يُمرَّر جانباً، وفي «طلباتي» شارةٌ «طقم: الاسم × العدد». */
+
+.p-kit-item {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 12px;
+  padding: 10px 12px; border: 1px solid var(--border); border-inline-start: 4px solid var(--sc, var(--op-out));
+  border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-1); transition: border-color .15s, background .15s;
+}
+.p-kit-item .pmi-ico { grid-row: 1 / span 2; }
+.p-kit-item .pmi-main { grid-column: 2; grid-row: 1; }
+.p-kit-item .p-kit-inside { grid-column: 2; grid-row: 2; justify-self: start; }
+.p-kit-item .pmi-act { grid-column: 3; grid-row: 1 / span 2; }
+.p-kit-item.in-cart {
+  border-color: color-mix(in srgb, var(--sc, var(--op-out)) 55%, transparent);
+  background: color-mix(in srgb, var(--sc, var(--op-out)) 6%, var(--surface));
+}
+.p-kit-item.p-kit-hit { box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 55%, transparent); }
+.p-kit-inside {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 40px; padding: 0 10px; margin-inline-start: -10px;
+  border: 0; border-radius: 10px; background: transparent; color: var(--info); font-weight: 600; font-size: 13px;
+}
+.p-kit-inside:hover { background: var(--surface-3); }
+.chip.p-kit-chip { --sc: var(--op-out); }
+.chip.p-kit-chip.on { background: var(--op-out); border-color: var(--op-out); color: #fff; }
+.p-kit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.p-kit-list li {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 2px;
+  border-bottom: 1px dashed var(--border); font-size: 14px;
+}
+.p-kit-list li:last-child { border-bottom: 0; }
+.pkl-name { min-width: 0; overflow-wrap: anywhere; }
+.pkl-qty { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* السلّة: سطر الطقم وتحته «ما بداخله»، وفي طلب الإدخال باهتٌ «للإخراج وحده». */
+.p-cart-kit { border-inline-start: 4px solid var(--sc, var(--op-out)); }
+.p-cart-kit-foot { grid-column: 2 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+.p-cart-kit.p-kit-off > .pmi-ico, .p-cart-kit.p-kit-off > .pmi-main { opacity: .55; }
+.p-kit-only { font-size: 12.5px; font-weight: 700; color: var(--warn); }
+.p-cart-prior .prior-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  background: var(--warn-soft); color: var(--warn); font-size: 12.5px; font-weight: 600;
+}
+.p-cart-kitin { color: var(--bad); }
+.p-again-kit { color: var(--text-3); }
+.p-again-kit span[translate] { font-weight: 600; color: var(--text-2); }
+
+/* رئيسية الطالب: الأطقم أيقوناتٍ تُمرَّر جانباً، كلٌّ يفتح القائمة عليه. */
+.p-home-kits { margin-bottom: 16px; }
+.p-kit-tiles {
+  display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 12px 14px 14px;
+}
+.p-kit-tiles::-webkit-scrollbar { display: none; }
+.p-kit-tile {
+  flex: none; width: 132px; min-height: 104px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  padding: 12px; border-radius: 14px; border: 1px solid var(--border); border-top: 4px solid var(--sc, var(--op-out));
+  background: var(--surface); color: var(--text); text-decoration: none;
+}
+.p-kit-tile:hover { text-decoration: none; border-color: var(--sc, var(--op-out)); }
+.p-kit-tile b { font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.pkt-ico {
+  display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px;
+  background: color-mix(in srgb, var(--sc, var(--op-out)) 14%, transparent); color: var(--sc, var(--op-out));
+}
+
+/* «طلباتي»: شارة الطقم تحت العنوان، و«ما بداخله» في درج الطلب. */
+.req-kit {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--op-out) 10%, transparent); color: var(--op-out-ink, var(--op-out));
+  font-size: 12px; font-weight: 600;
+}
+.req-kit svg { flex: none; }
+.req-kit-n { white-space: nowrap; }
+.p-kit-details { margin-top: 4px; }
+.p-kit-details > summary { cursor: pointer; min-height: 36px; display: inline-flex; align-items: center; color: var(--info); font-size: 13px; font-weight: 600; }
+.p-kit-details[open] > summary { margin-bottom: 4px; }
+
+/* نموذج الطلب: «أضف طقماً جاهزاً»، ونافذة الأطقم، وسطر الطقم. */
+.p-add-kit { margin-bottom: 12px; min-height: 46px; border-style: dashed; color: var(--op-out-ink, var(--op-out)); }
+.p-kit-sheet { display: grid; gap: 8px; }
+.p-kit-pick {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 60px;
+  padding: 10px 12px; border: 1px solid var(--border); border-inline-start: 4px solid var(--sc, var(--op-out));
+  border-radius: 14px; background: var(--surface); color: var(--text); text-align: start;
+}
+.p-kit-pick:hover { border-color: var(--sc, var(--op-out)); }
+.p-kit-enough { font-weight: 700; color: var(--text-2); }
+.line.p-kit-line .ln-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+@media (max-width: 480px) {
+  .p-kit-item { padding: 10px; gap: 4px 10px; }
+  .p-kit-tile { width: 118px; }
+}
